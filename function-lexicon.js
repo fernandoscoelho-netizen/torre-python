@@ -1,4 +1,4 @@
-import {GAME_FUNCTIONS} from './game-functions.js?v=bagagens-1';
+import {GAME_FUNCTIONS} from './game-functions.js?v=bagagens-2';
 
 const $=id=>document.getElementById(id);
 const nameOf=item=>item.name.split('(')[0];

@@ -305,3 +305,17 @@ class SalaRecolha:
                 por_estado[mala.estado] += 1
         return {'minuto': self.minuto, 'hora': _hhmm(self.minuto), 'malas': por_estado,
                 'voos_concluidos': sorted(self._fechados), 'ocorrencias': len(self.ocorrencias)}
+
+    def registo(self):
+        """Dados para a cena 3D: tapetes, voos com as suas malas e o registo de eventos.
+
+        Devolve None quando o programa não deu nenhuma ordem nem simulou nada.
+        """
+        if not self.eventos:
+            return None
+        inicio = min([v.hora for v in self.voos.values()] + [e['minuto'] for e in self.eventos])
+        return {'inicio': inicio, 'fim': self.minuto, 'tapetes': list(self.tapetes),
+                'capacidade': CAPACIDADE_TAPETE,
+                'voos': [{'codigo': v.codigo, 'hora': v.hora, 'passageiros': v.passageiros,
+                          'malas': [m.codigo for m in v.malas]} for v in self.voos.values()],
+                'eventos': self.eventos, 'resumo': self.resumo()}

@@ -123,6 +123,29 @@ def _modulo_bagagens():
     return modulo
 
 
+# Cenários das bagagens: o nível escolhe a sala inicial; '#n' é uma variante usada só na avaliação.
+_AVARIAS_T03 = [dict(avaria=615, ocupados=[]), dict(avaria=608, ocupados=['T01']), dict(avaria=620, ocupados=['T04', 'T01'])]
+
+
+def _cenario_bagagens(lesson_id):
+    bag = _modulo_bagagens()
+    nivel, _, variante = str(lesson_id or '').partition('#')
+    if nivel != 'baggage_fault':
+        return bag.SalaRecolha([bag.criar_voo('PY001', 600, 150, 120)])
+    n = int(variante or 0)
+    cenario = _AVARIAS_T03[n]
+    voos = [bag.criar_voo('PY001', 600, 150, 120, semente=n + 1)]
+    voos += [bag.criar_voo(f'PY{2 + i:03d}', 590, 90, 50, semente=n + 1) for i, _ in enumerate(cenario['ocupados'])]
+    sala = bag.SalaRecolha(voos, semente=n + 1)
+    for i, tapete in enumerate(cenario['ocupados']):
+        sala.atribuir_tapete(f'PY{2 + i:03d}', tapete)
+        sala.iniciar_motor(tapete)
+    sala.atribuir_tapete('PY001', 'T03')
+    sala.iniciar_motor('T03')
+    sala.agendar_avaria('T03', cenario['avaria'])
+    return sala
+
+
 def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', files_json='{}'):
     try:
         if mode == 'lexicon':
@@ -260,7 +283,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             actions.append({'type': 'dispatch', 'flight': codigo, 'start': start, 'stand': lugar})
             return (start, end)
         _bag = _modulo_bagagens()
-        _sala = _bag.SalaRecolha([_bag.criar_voo('PY001', 600, 150, 120)])
+        _sala = _cenario_bagagens(lesson_id)
         def consultar_tapetes():
             return [{'codigo': t.codigo, 'estado': t.estado, 'voo': t.voo, 'motor': t.motor_ligado, 'malas': len(t.malas)}
                     for t in _sala.tapetes.values()]
@@ -272,6 +295,12 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             _sala.parar_motor(tapete)
         def libertar_tapete(tapete):
             _sala.libertar_tapete(tapete)
+        def estado_tapete(tapete):
+            return _sala._tapete(tapete).estado
+        def transferir_voo(voo, tapete):
+            _sala.transferir_voo(voo, tapete)
+        def ocorrencias():
+            return [dict(o) for o in _sala.ocorrencias]
         def contar_malas(voo, estado=None):
             if estado is not None and estado not in _bag.ESTADOS_MALA:
                 raise ValueError('Estado desconhecido. Usa um destes: ' + ', '.join(_bag.ESTADOS_MALA) + '.')
@@ -293,7 +322,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             return resposta
         api = dict(consultar_parqueamentos=consultar_parqueamentos, lugares_livres=lugares_livres, parqueamento_livre=parqueamento_livre, estado_voo=estado_voo, aterrar=aterrar, parquear=parquear)
         api.update(consultar_voos=consultar_voos, voos_para=voos_para, contar_voos=contar_voos, hora_atual=hora_atual, pista_livre=pista_livre, reservar_pista=reservar_pista, autorizar=autorizar, ao_minuto=ao_minuto, input=_entrada, voos=consultar_voos(), MAX_VOOS=100, HORA_INICIAL=360)
-        api.update(consultar_tapetes=consultar_tapetes, atribuir_tapete=atribuir_tapete, iniciar_motor=iniciar_motor, parar_motor=parar_motor, libertar_tapete=libertar_tapete, contar_malas=contar_malas, simular_bagagens=simular_bagagens)
+        api.update(consultar_tapetes=consultar_tapetes, atribuir_tapete=atribuir_tapete, iniciar_motor=iniciar_motor, parar_motor=parar_motor, libertar_tapete=libertar_tapete, contar_malas=contar_malas, simular_bagagens=simular_bagagens, estado_tapete=estado_tapete, transferir_voo=transferir_voo, ocorrencias=ocorrencias)
         if mode in ('run', 'assess'):
             _preparar_dados()
             _preparar_modulos(files_json)
@@ -309,7 +338,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             variables.append({'name': name, 'type': type(value).__name__, 'value': representation[:180]})
             if len(variables) >= 30:
                 break
-        return json.dumps({'ok': True, 'mode': mode, 'actions': actions, 'variables': variables, 'grade': _grade_solution(source, namespace, lesson_id) if mode == 'assess' else None}, ensure_ascii=False)
+        return json.dumps({'ok': True, 'mode': mode, 'actions': actions, 'variables': variables, 'grade': _grade_solution(source, namespace, lesson_id) if mode == 'assess' else None, 'baggage': _sala.registo()}, ensure_ascii=False)
     except BaseException as error:
         line = getattr(error, 'lineno', None)
         modulo = None

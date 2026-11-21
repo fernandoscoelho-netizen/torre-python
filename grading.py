@@ -1,6 +1,6 @@
 import copy, math, tempfile, pathlib
 
-_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim'}
+_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim', 'baggage_fault'}
 
 def _grade_solution(source, ns, lesson):
     tests = []
@@ -265,6 +265,32 @@ def _grade_solution(source, ns, lesson):
             check('Sem tapetes livres devolve None', lambda: chamar('escolher_tapete', [t('T01', 'ocupado'), t('T02', 'avariado')]) is None)
             check('Lista vazia devolve None', lambda: chamar('escolher_tapete', []) is None)
             check('O programa entrega as 120 malas do PY001', lambda: ns['contar_malas']('PY001', 'entregue') == 120)
+        elif lesson == 'baggage_fault':
+            import contextlib, io
+            check('reagir usa if', lambda: usa('reagir', ast.If))
+            check('O programa passa reagir a simular_bagagens', lambda: chama(None, 'simular_bagagens'))
+            for n, cenario in enumerate(_AVARIAS_T03):
+                cache = {}
+                def correr_cenario(n=n, cache=cache):
+                    if 'r' not in cache:
+                        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                            cache['r'] = json.loads(_workspace_handle(source, '{"stands":[]}', 'bagagens', f'baggage_fault#{n}'))
+                    r = cache['r']
+                    if not r['ok']:
+                        raise RuntimeError(r['error']['type'] + ': ' + r['error']['message'])
+                    return r['baggage']
+                def entregues(correr_cenario=correr_cenario):
+                    reg = correr_cenario()
+                    malas = {e['mala'] for e in reg['eventos'] if e['tipo'] == 'mala' and e['voo'] == 'PY001' and e['estado'] == 'entregue'}
+                    return len(malas) == 120
+                def rapido(correr_cenario=correr_cenario, avaria=cenario['avaria']):
+                    reg = correr_cenario()
+                    novo = [e for e in reg['eventos'] if e['tipo'] == 'tapete' and e.get('voo') == 'PY001' and e['estado'] == 'ocupado' and e['tapete'] != 'T03']
+                    return bool(novo) and novo[0]['minuto'] - avaria <= 2
+                hora = f"{cenario['avaria'] // 60:02d}:{cenario['avaria'] % 60:02d}"
+                ocup = ', '.join(cenario['ocupados']) or 'nenhum'
+                check(f'Avaria às {hora} (outros tapetes ocupados: {ocup}): 120 malas entregues', entregues)
+                check(f'Avaria às {hora}: PY001 mudado de tapete até 2 minutos depois', rapido)
     else:
         raise ValueError('Nível de aprendizagem desconhecido.')
     passed=sum(t['passed'] for t in tests)

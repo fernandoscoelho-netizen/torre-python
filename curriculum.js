@@ -166,5 +166,13 @@ export const LEVELS = [
     "criteria": "Ignora tapetes ocupados e avariados; respeita a ordem da lista; sem tapetes livres ou com a lista vazia devolve None; o programa entrega as 120 malas do PY001.",
     "code": "def escolher_tapete(tapetes):\n    for tapete in tapetes:\n        pass  # se o estado for \"livre\", devolve o código\n    return None\n\ntapete = escolher_tapete(consultar_tapetes())\nprint(\"Tapete escolhido:\", tapete)\n# atribuir_tapete(\"PY001\", tapete)\n# iniciar_motor(tapete)\n# resumo = simular_bagagens()\n# print(resumo[\"malas\"][\"entregue\"], \"malas entregues às\", resumo[\"hora\"])\n",
     "number": 21
+  },
+  {
+    "id": "baggage_fault",
+    "title": "Avaria no carrossel T03",
+    "description": "Bloco 2 · Bagagens. O PY001 está no carrossel T03, com o motor ligado, e a meio da recolha o T03 avaria. Escreve reagir(minuto): é chamada no início de cada minuto simulado. Quando estado_tapete(\"T03\") for \"avariado\" e o PY001 ainda lá estiver, escolhe um tapete livre (podes reutilizar escolher_tapete do nível anterior), usa transferir_voo(\"PY001\", tapete) e liga o motor do tapete novo. As malas que estavam no T03 voltam à zona de espera e não se perdem. Termina com simular_bagagens(reagir). ocorrencias() mostra o que aconteceu.",
+    "criteria": "Avaliado em três cenários diferentes (avaria a horas diferentes e outros tapetes ocupados): as 120 malas do PY001 são entregues e o voo muda de tapete até 2 minutos depois da avaria.",
+    "code": "def escolher_tapete(tapetes):\n    for tapete in tapetes:\n        if tapete[\"estado\"] == \"livre\":\n            return tapete[\"codigo\"]\n    return None\n\nvoo_no_t03 = True\n\ndef reagir(minuto):\n    global voo_no_t03\n    if voo_no_t03 and estado_tapete(\"T03\") == \"avariado\":\n        pass  # escolhe um tapete livre, transfere o PY001 e liga o motor\n\nresumo = simular_bagagens(reagir)\nprint(resumo)\nfor o in ocorrencias():\n    print(o[\"minuto\"], o[\"texto\"])\n",
+    "number": 22
   }
 ];

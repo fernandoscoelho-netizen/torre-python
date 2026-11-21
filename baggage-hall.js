@@ -46,10 +46,10 @@ export function prepararRegisto(registo) {
         for (const p of tp.entradas) {
             const n = ordem[p.minuto] = (ordem[p.minuto] ?? -1) + 1;
             p.ordem = n; p.total = total[p.minuto];
-            fila = Math.max(p.minuto + TF + n / p.total * 0.8, fila + 1 / CADENCIA);
+            fila = Math.max(p.minuto + TF + n / p.total * 0.7, fila + 1 / CADENCIA);
             p.entra = Math.min(fila, Math.max(p.minuto + 0.05, p.fim - 0.05));
             p.carga = Math.max(p.minuto, p.entra - TF);
-            faixa = V * (p.entra - anterior) < 0.62 ? 1 - faixa : 0; p.faixa = faixa; anterior = p.entra;
+            faixa = V * (p.entra - anterior) < 0.52 ? 1 - faixa : 0; p.faixa = faixa; anterior = p.entra;
             p.tmEntra = tempoMotor(tp.motor, p.entra);
         }
     }
@@ -316,13 +316,21 @@ function noCaminho(cam, d) {                     // posição e rumo a d metros 
     return { x: p.x + tg.x * fora, z: p.z + tg.z * fora, ang: Math.atan2(-tg.z, tg.x) };
 }
 
+const suave = k => { k = Math.max(0, Math.min(1, k)); return k * k * (3 - 2 * k); };
+function avanco(l, tt, comp) {                   // metros já percorridos na chegada: vem da placa, aguarda vez atrás do cais e só depois encosta
+    const entra = l.A + (l.B - l.A) * 0.2, para = Math.max(entra + 0.05, l.B - 0.45), vai = Math.max(para, l.B - 0.28), espera = Math.min(14, comp / 2);
+    if (tt < para) return suave((tt - entra) / (para - entra)) * (comp - espera);
+    if (tt < vai || l.curto) return comp - espera;
+    return comp - espera + suave((tt - vai) / (l.B - 0.02 - vai)) * espera;
+}
+
 function atualizarLotes(tt, tapeteAgora) {
     const parados = new Map();
     for (const l of lotes) {
         l.fase = 'fora';
         const chega = l.A === null ? l.B : l.B - 0.02, entra = l.A === null ? l.B : l.A + (l.B - l.A) * 0.2;
         if (tt < entra) continue;
-        if (tt < chega) { l.fase = 'viagem'; l.k = (tt - entra) / (chega - entra); }
+        if (tt < chega) l.fase = 'viagem';
         else if (tt <= l.fim + 0.06) { l.fase = 'parado'; const d = tapeteAgora[l.voo] ?? '-'; if (!parados.has(d)) parados.set(d, []); parados.get(d).push(l); }
         else if (tt < l.fim + 1.2 && l.tapeteFim) { l.fase = 'saida'; l.k = (tt - l.fim - 0.06) / 1.14; }
     }
@@ -345,7 +353,7 @@ function atualizarLotes(tt, tapeteAgora) {
         if (l.fase === 'fora') for (const v of l.veiculos) v.visivel = false;
         else if (l.fase !== 'parado') {
             const cam = l.fase === 'viagem' ? caminho('chegada', modelo.carrosseis[l.tapeteB]?.x ?? -2) : caminho('saida', modelo.carrosseis[l.tapeteFim].x);
-            const d = l.fase === 'viagem' ? (1 - (1 - l.k) ** 2) * (cam.comp - l.curto) : l.k ** 1.6 * (cam.comp + 4 * l.veiculos.length);
+            const d = l.fase === 'viagem' ? avanco(l, tt, cam.comp) : l.k ** 1.3 * (cam.comp + 4 * l.veiculos.length);
             l.veiculos.forEach((v, j) => Object.assign(v, noCaminho(cam, d - (j ? 3.35 + 3.4 * (j - 1) : 0)), { visivel: true }));
         }
         l.veiculos.forEach(v => { v.malha.visible = v.visivel; if (v.visivel) { v.malha.position.set(v.x, 0, v.z); v.malha.rotation.y = v.ang; } });
@@ -578,4 +586,4 @@ $('bh-tempo').oninput = e => { t = Number(e.target.value); aReproduzir = false; 
 $('bh-vista').onchange = e => { seguir(null); vista(e.target.value); };
 
 window.addEventListener('baggage-run', e => { abrir(); carregar(e.detail); });
-window.baggageHall = { abrir, fechar, seguir, vista, info: () => renderer && { ...renderer.info.render, geometrias: renderer.info.memory.geometries, texturas: renderer.info.memory.textures } };
+window.baggageHall = { abrir, fechar, seguir, vista, info: () => renderer && { ...renderer.info.render, geometrias: renderer.info.memory.geometries, texturas: renderer.info.memory.textures }, lotes: () => lotes.map(l => ({ voo: l.voo, A: l.A, B: l.B, n: l.n, fim: l.fim, fase: l.fase, tapeteB: l.tapeteB, tapeteFim: l.tapeteFim, curto: l.curto })) };

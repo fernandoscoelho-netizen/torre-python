@@ -32,9 +32,10 @@ export function createDayRenderer({originalPlanes,createActor,stands,camera,cont
     const damping=controls.enableDamping;
     function actor(id){if(!actors.has(id)){const a=createActor(id);a.visible=false;actors.set(id,a);labels.set(id,addLabel(id,a));}return actors.get(id);}
     function release(){follow=null;controls.enableDamping=damping;}
-    function update(now=performance.now()){
+    // `suspenso`: a chegada do PY001 está em cena; os voos do dia saem de cena para o avião da missão se ver.
+    function update(now=performance.now(),suspenso=false){
         const dt=lastFrame===null?0:Math.max(0,Math.min(.1,(now-lastFrame)/1000));lastFrame=now;
-        const enabled=document.body.classList.contains('day-mode')&&snapshot;
+        const enabled=document.body.classList.contains('day-mode')&&snapshot&&!suspenso;
         if(!enabled){if(entered){original.forEach(([p,v])=>p.visible=v);actors.forEach(a=>a.visible=false);entered=false;release();}return;}
         entered=true;original.forEach(([p])=>p.visible=false);actors.forEach(a=>a.visible=false);
         const time=Math.min(1439,snapshot.hora+Math.max(0,now-anchor)/1000*rate);

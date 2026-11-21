@@ -72,7 +72,8 @@ def _preparar_dados(voos_json=None):
 
 _STDLIB_PROTEGIDOS = {'random', 'math', 'csv', 'json', 'datetime', 'time', 'os', 'sys', 'collections', 'statistics',
                       'zoneinfo', 'string', 're', 'io', 'pathlib', 'typing', 'copy', 'itertools', 'functools', 'ast',
-                      'tempfile', 'traceback', 'textwrap', 'enum', 'dataclasses', 'decimal', 'fractions', 'operator'}
+                      'tempfile', 'traceback', 'textwrap', 'enum', 'dataclasses', 'decimal', 'fractions', 'operator',
+                      'bagagens'}
 _PROJETO = {'dir': None, 'nomes': set()}
 
 
@@ -104,6 +105,22 @@ def _preparar_modulos(files_json):
     sys.path.insert(0, pasta)
     import importlib
     importlib.invalidate_caches()
+
+
+def _modulo_bagagens():
+    """Motor das bagagens (bagagens.py): no navegador vem do Worker; nos testes, da pasta do projeto."""
+    modulo = sys.modules.get('bagagens')
+    if modulo is not None:
+        return modulo
+    fonte = globals().get('_bagagens_source')
+    if fonte is None:
+        import bagagens as modulo
+        return modulo
+    import types
+    modulo = types.ModuleType('bagagens')
+    exec(compile(fonte, 'bagagens.py', 'exec'), modulo.__dict__)
+    sys.modules['bagagens'] = modulo
+    return modulo
 
 
 def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', files_json='{}'):
@@ -242,6 +259,29 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             _autorizacoes.append({'codigo': codigo, 'inicio': start, 'lugar': lugar})
             actions.append({'type': 'dispatch', 'flight': codigo, 'start': start, 'stand': lugar})
             return (start, end)
+        _bag = _modulo_bagagens()
+        _sala = _bag.SalaRecolha([_bag.criar_voo('PY001', 600, 150, 120)])
+        def consultar_tapetes():
+            return [{'codigo': t.codigo, 'estado': t.estado, 'voo': t.voo, 'motor': t.motor_ligado, 'malas': len(t.malas)}
+                    for t in _sala.tapetes.values()]
+        def atribuir_tapete(voo, tapete):
+            _sala.atribuir_tapete(voo, tapete)
+        def iniciar_motor(tapete):
+            _sala.iniciar_motor(tapete)
+        def parar_motor(tapete):
+            _sala.parar_motor(tapete)
+        def libertar_tapete(tapete):
+            _sala.libertar_tapete(tapete)
+        def contar_malas(voo, estado=None):
+            if estado is not None and estado not in _bag.ESTADOS_MALA:
+                raise ValueError('Estado desconhecido. Usa um destes: ' + ', '.join(_bag.ESTADOS_MALA) + '.')
+            return _sala.contar_malas(voo, estado)
+        def simular_bagagens(controlador=None, ate=None):
+            if controlador is not None and not callable(controlador):
+                raise TypeError('simular_bagagens recebe uma função, por exemplo simular_bagagens(controlar).')
+            fim = None if ate is None else _minutes(ate)
+            _sala.correr(None if controlador is None else (lambda sala, minuto: controlador(minuto)), ate=fim)
+            return _sala.resumo()
         def _entrada(mensagem=''):
             print(mensagem, end='')
             try:
@@ -253,6 +293,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             return resposta
         api = dict(consultar_parqueamentos=consultar_parqueamentos, lugares_livres=lugares_livres, parqueamento_livre=parqueamento_livre, estado_voo=estado_voo, aterrar=aterrar, parquear=parquear)
         api.update(consultar_voos=consultar_voos, voos_para=voos_para, contar_voos=contar_voos, hora_atual=hora_atual, pista_livre=pista_livre, reservar_pista=reservar_pista, autorizar=autorizar, ao_minuto=ao_minuto, input=_entrada, voos=consultar_voos(), MAX_VOOS=100, HORA_INICIAL=360)
+        api.update(consultar_tapetes=consultar_tapetes, atribuir_tapete=atribuir_tapete, iniciar_motor=iniciar_motor, parar_motor=parar_motor, libertar_tapete=libertar_tapete, contar_malas=contar_malas, simular_bagagens=simular_bagagens)
         if mode in ('run', 'assess'):
             _preparar_dados()
             _preparar_modulos(files_json)

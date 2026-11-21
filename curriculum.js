@@ -158,5 +158,13 @@ export const LEVELS = [
     "criteria": "Nunca começa antes da hora pedida nem sobrepõe operações; o plano não depende da ordem da lista recebida; agenda vazia devolve [].",
     "code": "def planear_pista(pedidos):\n    plano = []\n    return plano\n\npedidos = [dict(codigo=v[\"codigo\"], tipo=v[\"tipo\"], hora=v[\"hora\"], prioridade=5) for v in voos[:10]]\nfor codigo, inicio, fim in planear_pista(pedidos):\n    print(codigo, inicio, fim)\n    # autorizar(codigo, inicio)   # tira o # para o painel seguir o teu plano\n",
     "number": 20
+  },
+  {
+    "id": "baggage_claim",
+    "title": "Recolha de bagagens do PY001",
+    "description": "Bloco 2 · Bagagens. O PY001 aterra às 10:00 com 150 passageiros e 120 malas, e a sala de recolha tem quatro carrosséis (T01 a T04). Escreve escolher_tapete(tapetes): recebe uma lista de dicionários com codigo e estado e devolve o codigo do primeiro tapete com estado \"livre\", ou None se não houver nenhum. Depois usa as funções do jogo: consultar_tapetes(), atribuir_tapete(voo, tapete), iniciar_motor(tapete) e simular_bagagens(), que corre a recolha até todas as malas serem entregues e devolve um resumo.",
+    "criteria": "Ignora tapetes ocupados e avariados; respeita a ordem da lista; sem tapetes livres ou com a lista vazia devolve None; o programa entrega as 120 malas do PY001.",
+    "code": "def escolher_tapete(tapetes):\n    for tapete in tapetes:\n        pass  # se o estado for \"livre\", devolve o código\n    return None\n\ntapete = escolher_tapete(consultar_tapetes())\nprint(\"Tapete escolhido:\", tapete)\n# atribuir_tapete(\"PY001\", tapete)\n# iniciar_motor(tapete)\n# resumo = simular_bagagens()\n# print(resumo[\"malas\"][\"entregue\"], \"malas entregues às\", resumo[\"hora\"])\n",
+    "number": 21
   }
 ];

@@ -1,6 +1,6 @@
 // Painel «Missões»: um só sítio para escolher exemplos, exercícios livres e níveis.
 // Também mantém o estado no topo (missão atual e progresso) e o enunciado recolhível.
-import {LEVELS} from './curriculum.js?v=despachos-1';
+import {LEVELS} from './curriculum.js?v=bagagens-1';
 import {FREE_EXERCISES} from './free-exercises.js';
 
 const $ = id => document.getElementById(id);
@@ -157,11 +157,39 @@ function init() {
     for (const id of ['nav-code', 'nav-guide', 'nav-parks']) {
         $(id).addEventListener('click', () => { fecharPainel(); marcarRail(id); });
     }
+    // Guia: abre o guia de Python na janela de leitura, bem visível.
+    $('nav-guide').addEventListener('click', () => {
+        setTimeout(() => {
+            const ler = $('output-read-open');
+            if (ler && !ler.disabled) ler.click();
+        }, 0);
+    });
+    // Lugares: sai do horário do dia, mostra a tabela de parqueamentos e destaca-a.
+    $('nav-parks').addEventListener('click', () => {
+        if (document.body.classList.contains('day-mode')) $('day-close')?.click();
+        setTimeout(() => {
+            const dados = document.querySelector('.airport-data');
+            if (!dados) return;
+            dados.scrollIntoView({block: 'nearest'});
+            const r = dados.getBoundingClientRect();
+            const marca = el('div', {class: 'destaque-lugares', 'aria-hidden': 'true'});
+            Object.assign(marca.style, {left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px'});
+            document.body.append(marca);
+            setTimeout(() => { marca.remove(); marcarRail('nav-code'); }, 1400);
+            dados.querySelector('[data-data="stands"]')?.focus();
+        }, 50);
+    });
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && !$('missions-panel').hidden && !document.querySelector('dialog[open]')) fecharPainel();
     });
     document.querySelector('.lab-panels')?.addEventListener('pointerdown', fecharPainel);
     window.addEventListener('missions-change', renderPainel);
+    $('output-reading-dialog')?.addEventListener('close', () => {
+        if ($('missions-panel').hidden) marcarRail('nav-code');
+        // Guia e Funções do jogo só se consultam na janela de leitura: o painel de baixo volta à consola.
+        const sel = document.querySelector('.output-tabs [aria-selected="true"]');
+        if (!sel || sel.id === 'tab-functions' || sel.id === 'tab-guide') setTimeout(() => $('tab-console')?.click(), 0);
+    });
     $('brief-toggle').onclick = () => enunciado(!document.querySelector('.program-panel').classList.contains('brief-collapsed'));
     let recolhido = false;
     try { recolhido = localStorage.getItem(CHAVE_ENUNCIADO) === '1'; } catch {}

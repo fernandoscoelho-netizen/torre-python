@@ -148,3 +148,7 @@ body.workspace-mode{background:#eef0e9;color:#233b33}.workspace-mode>header,.wor
 #workspace .mission-brief>.mission-title{grid-column:2;grid-row:1;align-self:start}
 #workspace .program-panel.brief-collapsed .mission-brief>h1{margin:2px 0 4px;font-size:17px}
 .mission-item{padding:6px 10px;margin-bottom:4px}
+.destaque-lugares{position:fixed;z-index:9999;pointer-events:none;box-sizing:border-box;border:3px solid #edba5e;background:#edba5e1f;border-radius:6px;animation:destaqueLugares 1.4s ease-out forwards}
+@keyframes destaqueLugares{0%,50%{opacity:1}100%{opacity:0}}
+/* O painel de resultados mostra só resultados; Guia e Funções do jogo abrem-se na janela de leitura (barra Guia / Léxico) */
+#workspace .output-tabs #tab-functions,#workspace .output-tabs #tab-guide{display:none}

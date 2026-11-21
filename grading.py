@@ -1,6 +1,6 @@
 import copy, math, tempfile, pathlib
 
-_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower'}
+_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim'}
 
 def _grade_solution(source, ns, lesson):
     tests = []
@@ -254,6 +254,17 @@ def _grade_solution(source, ns, lesson):
                 horas = {p['codigo']: p['hora'] for p in agenda}
                 return all(b[1] >= a[2] for a, b in zip(plano, plano[1:])) and all(inicio >= horas[c] for c, inicio, _ in plano)
             check('Sem sobreposições nem operações antes da hora', sem_sobreposicao)
+        elif lesson == 'baggage_claim':
+            def t(codigo, estado):
+                return dict(codigo=codigo, estado=estado, voo=None, motor=False, malas=0)
+            mistos = [t('T01', 'ocupado'), t('T02', 'avariado'), t('T03', 'livre'), t('T04', 'livre')]
+            check('escolher_tapete usa um ciclo for', lambda: usa('escolher_tapete', ast.For))
+            check('Escolhe o primeiro tapete livre', lambda: chamar('escolher_tapete', mistos) == 'T03')
+            check('Ignora tapetes ocupados e avariados', lambda: chamar('escolher_tapete', [t('T01', 'avariado'), t('T02', 'ocupado'), t('T05', 'livre')]) == 'T05')
+            check('Respeita a ordem da lista', lambda: chamar('escolher_tapete', mistos[::-1]) == 'T04')
+            check('Sem tapetes livres devolve None', lambda: chamar('escolher_tapete', [t('T01', 'ocupado'), t('T02', 'avariado')]) is None)
+            check('Lista vazia devolve None', lambda: chamar('escolher_tapete', []) is None)
+            check('O programa entrega as 120 malas do PY001', lambda: ns['contar_malas']('PY001', 'entregue') == 120)
     else:
         raise ValueError('Nível de aprendizagem desconhecido.')
     passed=sum(t['passed'] for t in tests)

@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-const defaults={columns:48,code:60,scene:58},KEY='porto-python.layout.v1';
+const defaults={columns:58,code:64,scene:52},KEY='porto-python.layout.v2';
 let sizes={...defaults};
 try{const saved=JSON.parse(localStorage.getItem(KEY));for(const key of Object.keys(defaults))if(Number.isFinite(saved?.[key]))sizes[key]=saved[key];}catch{}
 const panels=document.querySelector('.lab-panels'),program=document.querySelector('.program-panel'),airport=document.querySelector('.airport-panel');

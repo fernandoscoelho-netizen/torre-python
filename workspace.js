@@ -15,7 +15,7 @@ function lessonText(){
     $('check-function').hidden=lessonMode!=='author';document.querySelector('.mission-checks').hidden=exercise.daily;
     const steps=$('free-steps');steps.replaceChildren();for(const text of exercise.steps){const li=document.createElement('li');li.textContent=text;steps.append(li);}
     $('free-expected').textContent=exercise.expected;$('free-instructions').open=false;freeCodeStatus();
-    if(exercise.daily)window.airportDay?.open();else document.body.classList.remove('day-mode');window.dispatchEvent(new Event('workspace-layout-change'));
+    if(exercise.daily)window.airportDay?.open();else document.body.classList.remove('day-mode');window.dispatchEvent(new Event('workspace-layout-change'));window.dispatchEvent(new Event('missions-change'));
 }
 function selectFreeLesson(mode){
     if(busy)return;rememberFree();window.learningPath?.leave();lessonMode=FREE_EXERCISES[mode]?mode:'guided';

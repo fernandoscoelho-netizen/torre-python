@@ -5,8 +5,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { geometriaMala } from './baggage-hall-model.js?v=bagagens-3';
-import { T, NOS, CAMINHOS, construirCentral } from './sorting-hall-model.js?v=embarque-1';
-import { prepararScada, desenharScada, zonaEm } from './sorting-scada.js?v=embarque-1';
+import { T, NOS, CAMINHOS, construirCentral } from './sorting-hall-model.js?v=relatorio-1';
+import { prepararScada, desenharScada, zonaEm } from './sorting-scada.js?v=relatorio-1';
 
 const H = 1 / 16;                                // intervalo mínimo entre duas malas no mesmo ponto (minutos)
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];

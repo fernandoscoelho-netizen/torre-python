@@ -242,9 +242,10 @@ class Embarque:
             # Quem não embarca: primeiro passageiros com malas (são esses que obrigam a abrir os porões), depois um sem malas
             com = [v for v in grupo if v.malas]
             sem = [v for v in grupo if not v.malas]
-            n_com = min(len(com), self.n_faltas - 1 if self.n_faltas > 1 else self.n_faltas)
+            n_faltas = self.n_faltas.get(voo, 0) if isinstance(self.n_faltas, dict) else self.n_faltas     # um número para todos ou {voo: número}
+            n_com = min(len(com), n_faltas - 1 if n_faltas > 1 else n_faltas)
             tarde = rng.sample(com, n_com)
-            ausentes = rng.sample(sem, min(len(sem), self.n_faltas - n_com))
+            ausentes = rng.sample(sem, min(len(sem), n_faltas - n_com))
             for v in tarde:
                 v.papel = 'tarde'                      # distrai-se nas lojas e só aparece depois de a porta fechar
             for v in ausentes:

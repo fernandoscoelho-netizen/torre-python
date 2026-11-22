@@ -73,7 +73,7 @@ def _preparar_dados(voos_json=None):
 _STDLIB_PROTEGIDOS = {'random', 'math', 'csv', 'json', 'datetime', 'time', 'os', 'sys', 'collections', 'statistics',
                       'zoneinfo', 'string', 're', 'io', 'pathlib', 'typing', 'copy', 'itertools', 'functools', 'ast',
                       'tempfile', 'traceback', 'textwrap', 'enum', 'dataclasses', 'decimal', 'fractions', 'operator',
-                      'bagagens', 'triagem', 'checkin', 'carregamento', 'embarque'}
+                      'bagagens', 'triagem', 'checkin', 'carregamento', 'embarque', 'relatorio'}
 _PROJETO = {'dir': None, 'nomes': set()}
 
 
@@ -108,7 +108,7 @@ def _preparar_modulos(files_json):
 
 
 def _modulo_motor(nome):
-    """Motores do Bloco 2 (bagagens.py, triagem.py, checkin.py, carregamento.py, embarque.py): no navegador vêm do Worker; nos testes, da pasta do projeto."""
+    """Motores do Bloco 2 (bagagens.py, triagem.py, checkin.py, carregamento.py, embarque.py, relatorio.py): no navegador vêm do Worker; nos testes, da pasta do projeto."""
     modulo = sys.modules.get(nome)
     if modulo is not None:
         return modulo
@@ -162,7 +162,7 @@ def _cenario_triagem(lesson_id):
     nivel, _, variante = str(lesson_id or '').partition('#')
     n = int(variante or 0)
     manha = _MANHAS[n]
-    do_checkin = nivel.startswith(('checkin_', 'loading_', 'boarding_'))     # nestes níveis as malas só existem depois de simular o check-in
+    do_checkin = nivel.startswith(('checkin_', 'loading_', 'boarding_', 'report_'))     # nestes níveis as malas só existem depois de simular o check-in
     partidas = [tri.criar_partida(voo, destino, hora, saida, 0 if do_checkin else 36, semente=n + 1, ilegiveis=0 if do_checkin else ilegiveis)
                 for (voo, destino, hora, ilegiveis), saida in zip(_PARTIDAS, manha['saidas'])]
     central = tri.CentralTriagem(partidas, semente=n + 1, sem_voo=0 if do_checkin else 3, programar=nivel != 'sorting_tags', rotas=nivel != 'sorting_routes')
@@ -177,6 +177,7 @@ def _cenario_triagem(lesson_id):
 
 # Cenários do check-in: os mesmos voos da triagem; em cada manhã há um balcão fechado e passageiros diferentes.
 _BALCAO_FECHADO = ['B06', 'B03', 'B05']
+_BALCOES_FECHADOS_NO_RELATORIO = [('B06', 'B02'), ('B03', 'B05'), ('B05', 'B01')]     # dia do relatório: dois balcões fechados
 _PASSAGEIROS_POR_VOO = 36
 
 
@@ -186,24 +187,34 @@ def _cenario_checkin(lesson_id, central):
     n = int(variante or 0)
     partidas = central.consultar_partidas()
     passageiros = ck.criar_passageiros(partidas, semente=n + 1, por_voo=_PASSAGEIROS_POR_VOO)
-    return ck.CheckIn(partidas, passageiros, fechados=(_BALCAO_FECHADO[n],), validar=nivel != 'checkin_validate',
+    fechados = _BALCOES_FECHADOS_NO_RELATORIO[n] if nivel.startswith('report_') else (_BALCAO_FECHADO[n],)
+    return ck.CheckIn(partidas, passageiros, fechados=fechados, validar=nivel != 'checkin_validate',
                       fila=nivel != 'checkin_queue', etiquetas=nivel != 'checkin_tags')
 
 
 # Cenários do carregamento: os mesmos voos; cada nível tem a sua dificuldade (porões apertados, centragem ou passageiros que faltam).
 _MODO_CARGA = {'loading_plan': 'apertado', 'loading_balance': 'centragem'}
+_SEM_RECONCILIACAO = [(1, 3), (0, 2), (2,)]     # dia do relatório: posição, por ordem de partida, dos voos sem leitor
 
 
 def _cenario_carregamento(lesson_id, central):
     car = _modulo_motor('carregamento')
     nivel, _, variante = str(lesson_id or '').partition('#')
     n = int(variante or 0)
-    return car.Placa(central.consultar_partidas(), semente=n + 1, modo=_MODO_CARGA.get(nivel, 'folgado'),
-                     faltas=0 if nivel in _MODO_CARGA else 3, plano=nivel not in _MODO_CARGA, reconciliacao=nivel != 'loading_reconcile')
+    placa = car.Placa(central.consultar_partidas(), semente=n + 1, modo=_MODO_CARGA.get(nivel, 'folgado'),
+                      faltas=0 if nivel in _MODO_CARGA else 3, plano=nivel not in _MODO_CARGA, reconciliacao=nivel != 'loading_reconcile')
+    if nivel.startswith('report_'):
+        # Dia do relatório: o leitor de reconciliação falha em alguns lugares e as malas de quem faltou só saem numa busca manual
+        ordem = [p['voo'] for p in sorted(central.consultar_partidas(), key=lambda p: p['hora'])]
+        sem_leitor = {ordem[i] for i in _SEM_RECONCILIACAO[n]}
+        de_fabrica = placa.reconciliacao_do_sistema
+        placa._reconciliar = lambda malas, embarcados: set() if malas and malas[0]['voo'] in sem_leitor else de_fabrica(malas, embarcados)
+    return placa
 
 
 # Cenários do embarque: os mesmos voos; em cada manhã há uma linha de controlo fechada e passageiros diferentes.
 _LINHA_FECHADA = ['L3', 'L4', 'L3']
+_FALTAS_NO_RELATORIO = [(2, 4, 0, 3), (3, 1, 5, 2), (0, 2, 4, 1)]
 _DADOS = {'dir': None}
 
 
@@ -220,7 +231,11 @@ def _cenario_embarque(lesson_id, central):
     emb = _modulo_motor('embarque')
     nivel, _, variante = str(lesson_id or '').partition('#')
     n = int(variante or 0)
-    return emb.Embarque(central.consultar_partidas(), semente=n + 1, fechada=_LINHA_FECHADA[n],
+    faltas = 3
+    if nivel.startswith('report_'):                                              # dia do relatório: cada voo com o seu número de faltas
+        ordem = [p['voo'] for p in sorted(central.consultar_partidas(), key=lambda p: p['hora'])]
+        faltas = dict(zip(ordem, _FALTAS_NO_RELATORIO[n]))
+    return emb.Embarque(central.consultar_partidas(), semente=n + 1, fechada=_LINHA_FECHADA[n], faltas=faltas,
                         seguranca=nivel != 'boarding_security', porta=nivel != 'boarding_gate')
 
 
@@ -378,7 +393,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
         def transferir_voo(voo, tapete):
             _sala.transferir_voo(voo, tapete)
         def ocorrencias():
-            return [dict(o) for o in sorted(_sala.ocorrencias + _balcoes.ocorrencias + _central.ocorrencias + _portas.ocorrencias + _placa.ocorrencias, key=lambda o: o['minuto'])]
+            return [dict(o) for o in sorted(_sala.ocorrencias + _balcoes.ocorrencias + _central.ocorrencias + _portas.ocorrencias + _placa.ocorrencias + (_dia['obj'].ocorrencias if _dia['obj'] else []), key=lambda o: o['minuto'])]
         def contar_malas(voo, estado=None):
             if estado is not None and estado not in _bag.ESTADOS_MALA:
                 raise ValueError('Estado desconhecido. Usa um destes: ' + ', '.join(_bag.ESTADOS_MALA) + '.')
@@ -490,6 +505,23 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
                 if isinstance(reservas, (str, dict)) or not hasattr(reservas, '__iter__'):
                     raise TypeError(f'Em entregar_embarcados, o voo {voo} devia ter um conjunto de reservas e tem {reservas!r}.')
                 _entregues[voo] = list(reservas)
+        _dia = {'obj': None}
+        def simular_dia():
+            if _dia['obj'] is None:
+                simular_checkin()
+                simular_triagem()
+                simular_embarque()
+                simular_carregamento()
+                if not (_balcoes.concluida and _portas.concluida and _placa.concluida):
+                    raise ValueError('O dia não chegou ao fim: não uses o argumento ate nas simulações antes de simular_dia().')
+                _dia['obj'] = _modulo_motor('relatorio').DiaDeOperacao(_balcoes.registo(), _central.registo(), _portas.registo(), _placa.registo())
+            return _dia['obj'].resumo()
+        def consultar_dia():
+            simular_dia()
+            return _dia['obj'].consultar()
+        def entregar_relatorio(relatorio):
+            simular_dia()
+            return _dia['obj'].entregar(relatorio)
         def _entrada(mensagem=''):
             print(mensagem, end='')
             try:
@@ -506,6 +538,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
         api.update(consultar_avioes=consultar_avioes, consultar_malas=consultar_malas, programar_plano=programar_plano, programar_reconciliacao=programar_reconciliacao, simular_carregamento=simular_carregamento)
         api.update(consultar_passageiros=consultar_passageiros, consultar_balcoes=consultar_balcoes, programar_validacao=programar_validacao, programar_fila=programar_fila, programar_etiquetas=programar_etiquetas, simular_checkin=simular_checkin)
         api.update(consultar_linhas=consultar_linhas, consultar_portas=consultar_portas, consultar_cartoes=consultar_cartoes, programar_seguranca=programar_seguranca, programar_porta=programar_porta, simular_embarque=simular_embarque, entregar_embarcados=entregar_embarcados, FICHEIRO_LEITURAS=FICHEIRO_LEITURAS, FICHEIRO_FALTAS=FICHEIRO_FALTAS)
+        api.update(simular_dia=simular_dia, consultar_dia=consultar_dia, entregar_relatorio=entregar_relatorio)
         if mode in ('run', 'assess'):
             _preparar_dados()
             _preparar_modulos(files_json)
@@ -521,7 +554,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             variables.append({'name': name, 'type': type(value).__name__, 'value': representation[:180]})
             if len(variables) >= 30:
                 break
-        return json.dumps({'ok': True, 'mode': mode, 'actions': actions, 'variables': variables, 'grade': _grade_solution(source, namespace, lesson_id) if mode == 'assess' else None, 'baggage': _sala.registo(), 'sorting': _central.registo(), 'checkin': _balcoes.registo(), 'loading': _placa.registo(), 'boarding': _portas.registo()}, ensure_ascii=False)
+        return json.dumps({'ok': True, 'mode': mode, 'actions': actions, 'variables': variables, 'grade': _grade_solution(source, namespace, lesson_id) if mode == 'assess' else None, 'baggage': _sala.registo(), 'sorting': _central.registo(), 'checkin': _balcoes.registo(), 'loading': _placa.registo(), 'boarding': _portas.registo(), 'report': _dia['obj'].registo() if _dia['obj'] else None}, ensure_ascii=False)
     except BaseException as error:
         line = getattr(error, 'lineno', None)
         modulo = None

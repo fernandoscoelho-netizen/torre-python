@@ -6,9 +6,9 @@
 // acima da placa. Não reproduz nenhum aeroporto em concreto.
 import * as THREE from 'three';
 import { fundir } from './baggage-hall-model.js?v=bagagens-3';
-import { criarCaminho } from './sorting-hall-model.js?v=embarque-1';
-import { geometriaAgente } from './checkin-hall-model.js?v=embarque-1';
-import { P, construirEstacionados } from './ramp-hall-model.js?v=embarque-1';
+import { criarCaminho } from './sorting-hall-model.js?v=relatorio-1';
+import { geometriaAgente } from './checkin-hall-model.js?v=relatorio-1';
+import { P, construirEstacionados } from './ramp-hall-model.js?v=relatorio-1';
 
 export const K = {
     X0: -124, X1: 94, Z0: -20, Z1: 0, ALTURA: 7.5, Y_PLACA: -3.5,

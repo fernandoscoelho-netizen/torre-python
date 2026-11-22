@@ -4,8 +4,8 @@
 // dentro de cada minuto, os passos de quem anda: avançar na fila, passar no pórtico, ir até à porta.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { criarCaminho } from './sorting-hall-model.js?v=embarque-1';
-import { K, FILAS, FILAS_PORTA, CADEIRAS, lugarEmTerra, lugarNaLoja, geometriaPassageiro, geometriaTabuleiro, construirEmbarque } from './boarding-hall-model.js?v=embarque-1';
+import { criarCaminho } from './sorting-hall-model.js?v=relatorio-1';
+import { K, FILAS, FILAS_PORTA, CADEIRAS, lugarEmTerra, lugarNaLoja, geometriaPassageiro, geometriaTabuleiro, construirEmbarque } from './boarding-hall-model.js?v=relatorio-1';
 
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];
 const T_AVANCO = 0.25;                           // minutos que a fila demora a avançar um lugar
@@ -247,6 +247,7 @@ sala.innerHTML = `
   <select id="bd-vista" aria-label="Vista"><option value="geral">Vista geral</option><option value="seguranca">Controlo de segurança</option><option value="raiox">Raios X e pórtico</option><option value="corredor">Corredor</option><option value="G21">Porta G21</option><option value="G22">Porta G22</option><option value="G23">Porta G23</option><option value="G24">Porta G24</option><option value="leitor">Leitor de cartões</option><option value="exterior">Aviões e mangas</option></select>
   <button id="bd-checkin" title="Voltar aos balcões de check-in" hidden>⬅<span class="bd-longo"> Check-in</span></button>
   <button id="bd-placa" title="Seguir as malas no carregamento do avião" hidden><span class="bd-longo">Placa </span>➜</button>
+  <button id="bd-operacoes" title="Ver o relatório do dia no centro de operações" hidden>📊<span class="bd-longo"> Operações</span></button>
   <button id="bd-fechar" title="Voltar à maquete do aeroporto"><span class="bd-longo">Aeroporto </span>✕</button>
 </div>`;
 viewport.append(sala);
@@ -525,6 +526,7 @@ function animar(agora) {
     $('bd-play').textContent = aReproduzir ? 'Ⅱ' : '▶';
     $('bd-checkin').hidden = !(dados?.origem === 'checkin' && window.checkinHall?.dados?.());
     $('bd-placa').hidden = !window.rampHall?.dados?.();
+    $('bd-operacoes').hidden = !window.opsHall?.dados?.();
     controls.update();
     desenhar();
     renderer.render(scene, camera);
@@ -560,6 +562,7 @@ $('bd-tempo').oninput = e => { t = Number(e.target.value); aReproduzir = false; 
 $('bd-vista').onchange = e => { seguir(null); vista(e.target.value); };
 $('bd-checkin').onclick = () => window.checkinHall?.abrir();
 $('bd-placa').onclick = () => window.rampHall?.abrir();
+$('bd-operacoes').onclick = () => window.opsHall?.abrir();
 
 window.addEventListener('boarding-run', e => { abrir(); carregar(e.detail); });
 window.addEventListener('hall-open', e => { if (e.detail !== 'boarding' && sala.classList.contains('aberta')) fechar(); });

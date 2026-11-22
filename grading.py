@@ -1,6 +1,6 @@
 import copy, math, tempfile, pathlib
 
-_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim', 'baggage_fault', 'sorting_tags', 'sorting_routes', 'sorting_fault', 'checkin_validate', 'checkin_queue', 'checkin_tags', 'loading_plan', 'loading_balance', 'loading_reconcile', 'boarding_security', 'boarding_gate', 'boarding_files'}
+_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim', 'baggage_fault', 'sorting_tags', 'sorting_routes', 'sorting_fault', 'checkin_validate', 'checkin_queue', 'checkin_tags', 'loading_plan', 'loading_balance', 'loading_reconcile', 'boarding_security', 'boarding_gate', 'boarding_files', 'report_lists', 'report_modules', 'report_tests'}
 
 def _grade_solution(source, ns, lesson):
     tests = []
@@ -906,6 +906,206 @@ def _grade_solution(source, ns, lesson):
                 for n in range(3):
                     check(f'Manhã {n + 1}, do balcão ao porão: só saem as malas de quem não embarcou e os voos partem à hora', lambda n=n: percurso(n))
                     check(f'Manhã {n + 1}: o ficheiro de faltas tem quem não embarcou em cada voo', lambda n=n: ficheiro_de_faltas(n))
+        elif lesson in ('report_lists', 'report_modules', 'report_tests'):
+            import contextlib, io, sys as _sys
+            _no_modulo = lesson != 'report_lists'
+            FUNCOES = ('voos_atrasados', 'pontualidade', 'faltas_por_voo', 'peso_por_voo') + (('taxa_embarque', 'maiores_esperas') if _no_modulo else ())
+            CHAVES = ('pontualidade', 'atrasados', 'faltas', 'peso') + (('taxa_embarque', 'esperas') if _no_modulo else ())
+            def manha(n, cache={}):
+                # Volta a correr o programa do aluno noutro dia (outros passageiros, outros atrasos, outras faltas)
+                if n not in cache:
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                        cache[n] = json.loads(_workspace_handle(source, '{"stands":[]}', 'report', f'{lesson}#{n}'))
+                r = cache[n]
+                if not r['ok']:
+                    raise RuntimeError(r['error']['type'] + ': ' + r['error']['message'])
+                if not r['report']:
+                    raise ValueError('O programa não chegou a pedir os dados do dia: usa consultar_dia().')
+                return r
+            def relatorio_certo(n):
+                reg = manha(n)['report']
+                if not reg['entregue']:
+                    raise ValueError('O programa não entregou o relatório: usa entregar_relatorio(relatorio).')
+                por = {i['chave']: i for i in reg['indicadores']}
+                for k in CHAVES:
+                    if not por[k]['entregue']:
+                        raise ValueError(f'Falta o indicador "{k}" no relatório entregue.')
+                    if not por[k]['confere']:
+                        raise ValueError(f'O indicador "{k}" não confere com os dados do dia. O programa entregou {por[k]["valor"]!r}.')
+                return True
+            def modulo():
+                m = _sys.modules.get('indicadores')
+                ficheiro = getattr(m, '__file__', None) or ''
+                if m is None or not (_PROJETO['dir'] and ficheiro.startswith(_PROJETO['dir'])):
+                    raise ValueError('Cria o separador indicadores.py (botão + ao lado de chegada.py) e importa-o no programa principal com import indicadores.')
+                return m
+            def f(nome):
+                if not _no_modulo:
+                    return fn(nome)
+                alvo = getattr(modulo(), nome, None)
+                if not callable(alvo):
+                    raise ValueError(f'Define {nome} no módulo indicadores.py.')
+                return alvo
+            def definicao(nome):
+                arvore = ast.parse(open(modulo().__file__, encoding='utf-8').read()) if _no_modulo else tree
+                d = next((x for x in arvore.body if isinstance(x, ast.FunctionDef) and x.name == nome), None)
+                if d is None:
+                    raise ValueError(f'Define a função {nome}' + (' no módulo indicadores.py.' if _no_modulo else ' no teu programa.'))
+                return d
+            def tem(nome, *tipos):
+                return any(isinstance(x, tipos) for x in ast.walk(definicao(nome)))
+            def compreensoes():
+                for nome in FUNCOES:
+                    if tem(nome, ast.For, ast.While):
+                        raise ValueError(f'{nome} tem um ciclo for ou while: aqui só entram compreensões.')
+                if not tem('voos_atrasados', ast.ListComp):
+                    raise ValueError('voos_atrasados devolve uma compreensão de lista: [expressão for v in voos if condição].')
+                if not tem('pontualidade', ast.ListComp, ast.GeneratorExp):
+                    raise ValueError('pontualidade conta os voos a horas com uma compreensão.')
+                for nome in ('faltas_por_voo', 'peso_por_voo'):
+                    if not tem(nome, ast.DictComp):
+                        raise ValueError(f'{nome} devolve uma compreensão de dicionário: {{chave: valor for v in voos}}.')
+                if _no_modulo and not (tem('taxa_embarque', ast.ListComp, ast.GeneratorExp) and tem('maiores_esperas', ast.ListComp)):
+                    raise ValueError('taxa_embarque e maiores_esperas também usam compreensões.')
+                return True
+            # Dados de teste feitos à mão: cinco voos, um deles sem passageiros nem malas, e um passageiro de um voo que não existe
+            V = [dict(voo='QX1', destino='Faro', hora=600, atraso=0), dict(voo='QX2', destino='Roma', hora=610, atraso=7), dict(voo='QX3', destino='Oslo', hora=620, atraso=0),
+                 dict(voo='QX4', destino='Viena', hora=630, atraso=1), dict(voo='QX5', destino='Praga', hora=640, atraso=0)]
+            def _p(nome, voo, estado, espera):
+                return dict(reserva='R' + nome.upper(), nome=nome, voo=voo, estado=estado, motivo=None, espera=espera, seguranca=None, malas=1)
+            P = [_p('Marta', 'QX1', 'embarcou', 6), _p('Bruno', 'QX1', 'faltou', 14), _p('Sara', 'QX1', 'recusado', 3), _p('Tiago', 'QX2', 'embarcou', 14),
+                 _p('Alice', 'QX2', 'embarcou', 14), _p('Hugo', 'QX2', 'recusado', 21), _p('Olga', 'QX3', 'embarcou', 0), _p('Duarte', 'QX4', 'faltou', 9),
+                 _p('Xana', 'QX4', 'faltou', 2), _p('Caio', 'QX4', 'embarcou', 11), _p('Nelo', 'QX9', 'recusado', None), _p('Íris', 'QX3', 'embarcou', 5)]
+            def _m(i, voo, peso, estado):
+                return dict(etiqueta=f'{voo}-{i:03d}', voo=voo, reserva='R', peso=peso, estado=estado, porao='DIANTEIRO' if estado != 'em_terra' else None)
+            M = [_m(1, 'QX1', 18.4, 'carregada'), _m(2, 'QX1', 22.3, 'carregada'), _m(3, 'QX1', 9.9, 'retirada'), _m(4, 'QX2', 30.1, 'carregada'),
+                 _m(5, 'QX2', 12.0, 'em_terra'), _m(6, 'QX3', 7.7, 'retirada'), _m(7, 'QX4', 15.2, 'carregada'), _m(8, 'QX4', 15.3, 'carregada'), _m(9, 'QX4', 4.6, 'carregada')]
+            REF = {
+                'voos_atrasados': lambda voos: [v['voo'] for v in voos if v['atraso'] > 0],
+                'pontualidade': lambda voos: round(100 * len([v for v in voos if v['atraso'] == 0]) / len(voos)) if voos else 0,
+                'faltas_por_voo': lambda voos, passageiros: {v['voo']: len([p for p in passageiros if p['voo'] == v['voo'] and p['estado'] == 'faltou']) for v in voos},
+                'peso_por_voo': lambda voos, malas: {v['voo']: round(sum(m['peso'] for m in malas if m['voo'] == v['voo'] and m['estado'] == 'carregada'), 1) for v in voos},
+                'taxa_embarque': lambda passageiros: (lambda a: round(100 * len([p for p in a if p['estado'] == 'embarcou']) / len(a), 1) if a else 0.0)([p for p in passageiros if p['estado'] != 'recusado']),
+                'maiores_esperas': lambda passageiros, n=5: [(p['nome'], p['espera']) for p in sorted([p for p in passageiros if p['espera'] is not None], key=lambda p: (-p['espera'], p['nome']))[:n]],
+            }
+            CASOS = {
+                'voos_atrasados': [(V,), (V[:1],), (V[2:4],), ([],)],
+                'pontualidade': [(V,), (V[:1],), (V[1:2],), (V[:3],), ([],)],
+                'faltas_por_voo': [(V, P), (V[:2], P), (V, []), ([], P)],
+                'peso_por_voo': [(V, M), (V[3:], M), (V, []), ([], M)],
+                'taxa_embarque': [(P,), (P[:3],), (P[2:3],), ([],)],
+                'maiores_esperas': [(P,), (P, 3), (P, 1), (P[:2], 5), ([], 5)],
+            }
+            def igual(nome, obtido, certo):
+                if nome == 'maiores_esperas':
+                    return isinstance(obtido, (list, tuple)) and [tuple(x) if isinstance(x, (list, tuple)) else x for x in obtido] == certo
+                if nome == 'peso_por_voo':
+                    return isinstance(obtido, dict) and set(obtido) == set(certo) and all(isinstance(obtido[k], (int, float)) and abs(obtido[k] - certo[k]) < 0.05 for k in certo)
+                if nome in ('pontualidade', 'taxa_embarque'):
+                    return isinstance(obtido, (int, float)) and not isinstance(obtido, bool) and abs(obtido - certo) < 0.05
+                return type(obtido) is type(certo) and obtido == certo
+            def resumo_args(args):
+                return ', '.join(f'{len(a)} linhas' if isinstance(a, list) else repr(a) for a in args)
+            def funcao_certa(nome):
+                alvo = f(nome)
+                for args in CASOS[nome]:
+                    obtido = alvo(*copy.deepcopy(args))
+                    certo = REF[nome](*args)
+                    if not igual(nome, obtido, certo):
+                        raise ValueError(f'{nome}({resumo_args(args)}) devia devolver {certo!r} e devolveu {obtido!r}.')
+                return True
+            DESCRICAO = {
+                'voos_atrasados': 'voos_atrasados devolve os códigos dos voos com atraso, pela ordem da tabela',
+                'pontualidade': 'pontualidade devolve a percentagem arredondada de voos sem atraso, e 0 se não houver voos',
+                'faltas_por_voo': 'faltas_por_voo tem uma chave por voo da tabela, mesmo sem faltas, e não conta os recusados',
+                'peso_por_voo': 'peso_por_voo soma só as malas carregadas, com uma casa decimal',
+                'taxa_embarque': 'taxa_embarque é a percentagem dos aceites no check-in que embarcaram, com uma casa decimal',
+                'maiores_esperas': 'maiores_esperas devolve os n pares (nome, espera) com mais espera; nos empates, por ordem do nome',
+            }
+            check('O programa usa consultar_dia e entregar_relatorio', lambda: chama(None, 'consultar_dia') and chama(None, 'entregar_relatorio'))
+            if _no_modulo:
+                def organizado():
+                    importa = any((isinstance(x, ast.Import) and any(a.name == 'indicadores' for a in x.names)) or (isinstance(x, ast.ImportFrom) and x.module == 'indicadores') for x in ast.walk(tree))
+                    if not importa:
+                        raise ValueError('O programa principal tem de importar o módulo: import indicadores ou from indicadores import ...')
+                    repetidas = [x.name for x in ast.walk(tree) if isinstance(x, ast.FunctionDef) and x.name in FUNCOES]
+                    if repetidas:
+                        raise ValueError(f'{repetidas[0]} está definida no programa principal: as funções dos indicadores ficam só em indicadores.py.')
+                    modulo()
+                    return all(definicao(nome) for nome in FUNCOES)
+                check('As seis funções estão no módulo indicadores.py e o programa principal importa-o', organizado)
+            check('As funções usam compreensões, sem ciclos for nem while', compreensoes)
+            if lesson != 'report_tests':
+                for nome in FUNCOES:
+                    check(DESCRICAO[nome], lambda nome=nome: funcao_certa(nome))
+            else:
+                check('O módulo indicadores.py passa nas verificações do nível anterior', lambda: all(funcao_certa(nome) for nome in FUNCOES))
+                MUTANTES = {
+                    'pontualidade': [('divide sem verificar se a lista de voos está vazia', lambda voos: round(100 * len([v for v in voos if v['atraso'] == 0]) / len(voos))),
+                                     ('conta os voos atrasados em vez dos voos a horas', lambda voos: round(100 * len([v for v in voos if v['atraso'] > 0]) / len(voos)) if voos else 0),
+                                     ('devolve uma fração (0.5) em vez da percentagem (50)', lambda voos: len([v for v in voos if v['atraso'] == 0]) / len(voos) if voos else 0)],
+                    'voos_atrasados': [('inclui os voos com atraso 0', lambda voos: [v['voo'] for v in voos if v['atraso'] >= 0]),
+                                       ('devolve as linhas dos voos em vez dos códigos', lambda voos: [v for v in voos if v['atraso'] > 0])],
+                    'faltas_por_voo': [('conta os recusados como faltas', lambda voos, passageiros: {v['voo']: len([p for p in passageiros if p['voo'] == v['voo'] and p['estado'] != 'embarcou']) for v in voos}),
+                                       ('deixa de fora os voos sem faltas', lambda voos, passageiros: {k: n for k, n in REF['faltas_por_voo'](voos, passageiros).items() if n})],
+                    'peso_por_voo': [('soma também as malas retiradas e as que ficaram em terra', lambda voos, malas: {v['voo']: round(sum(m['peso'] for m in malas if m['voo'] == v['voo']), 1) for v in voos}),
+                                     ('conta as malas em vez de somar os pesos', lambda voos, malas: {v['voo']: len([m for m in malas if m['voo'] == v['voo'] and m['estado'] == 'carregada']) for v in voos})],
+                    'taxa_embarque': [('divide por todos os passageiros, incluindo os recusados', lambda passageiros: round(100 * len([p for p in passageiros if p['estado'] == 'embarcou']) / len(passageiros), 1) if passageiros else 0.0),
+                                      ('divide sem verificar se a lista está vazia', lambda passageiros: round(100 * len([p for p in passageiros if p['estado'] == 'embarcou']) / len([p for p in passageiros if p['estado'] != 'recusado']), 1))],
+                    'maiores_esperas': [('ordena da menor para a maior espera', lambda passageiros, n=5: [(p['nome'], p['espera']) for p in sorted([p for p in passageiros if p['espera'] is not None], key=lambda p: (p['espera'], p['nome']))[:n]]),
+                                        ('ignora o n e devolve a lista toda', lambda passageiros, n=5: REF['maiores_esperas'](passageiros, len(passageiros))),
+                                        ('nos empates não ordena pelo nome', lambda passageiros, n=5: [(p['nome'], p['espera']) for p in sorted([p for p in passageiros if p['espera'] is not None], key=lambda p: -p['espera'])[:n]])],
+                }
+                def correr(teste, trocas):
+                    """Corre um teste do aluno com as funções de indicadores trocadas; devolve a exceção, ou None se passou."""
+                    m = modulo()
+                    antes_m = {nome: getattr(m, nome, None) for nome in trocas}
+                    antes_ns = {nome: ns[nome] for nome in trocas if nome in ns and ns[nome] is antes_m[nome]}
+                    try:
+                        for nome, nova in trocas.items():
+                            setattr(m, nome, nova)
+                            if nome in antes_ns:
+                                ns[nome] = nova
+                        with contextlib.redirect_stdout(io.StringIO()):
+                            teste()
+                        return None
+                    except Exception as e:
+                        return e
+                    finally:
+                        for nome, velha in antes_m.items():
+                            setattr(m, nome, velha)
+                        ns.update(antes_ns)
+                def teste_passa(nome):
+                    if not usa('testar_' + nome, ast.Assert):
+                        raise ValueError(f'Define testar_{nome}() no programa principal, com instruções assert.')
+                    erro = correr(fn('testar_' + nome), dict(REF))
+                    if erro is not None:
+                        raise ValueError(f'testar_{nome} falhou com uma função correta ({type(erro).__name__}: {erro}). Revê os valores esperados nos assert.')
+                    return True
+                def teste_apanha(nome):
+                    teste_passa(nome)
+                    for descricao, errada in MUTANTES[nome]:
+                        if correr(fn('testar_' + nome), {**REF, nome: errada}) is None:
+                            raise ValueError(f'testar_{nome} passou com uma versão de {nome} que {descricao}. Junta um assert com um caso que mostre esse erro.')
+                    return True
+                def corredor():
+                    def passa():
+                        pass
+                    def falha():
+                        assert 1 == 2
+                    def tambem_falha():
+                        assert [] == [0], 'listas diferentes'
+                    r = fn('correr_testes')([passa, falha, passa, tambem_falha])
+                    if not isinstance(r, (list, tuple)) or list(r) != ['falha', 'tambem_falha']:
+                        raise ValueError(f'Com quatro testes, em que falham o segundo e o quarto, correr_testes devia devolver os nomes dos dois, [\'falha\', \'tambem_falha\'], e devolveu {r!r}.')
+                    return list(fn('correr_testes')([passa])) == [] and list(fn('correr_testes')([])) == []
+                for nome in FUNCOES:
+                    check(f'testar_{nome} passa com uma função correta', lambda nome=nome: teste_passa(nome))
+                    check(f'testar_{nome} apanha {len(MUTANTES[nome])} versões erradas de {nome}', lambda nome=nome: teste_apanha(nome))
+                check('correr_testes usa try/except AssertionError e devolve os nomes dos testes que falharam', lambda: usa('correr_testes', ast.Try) and corredor())
+                check('O programa chama correr_testes antes de entregar o relatório', lambda: chama(None, 'correr_testes'))
+            for n in range(3):
+                check(f'Dia {n + 1}: o relatório entregue confere com os dados do dia', lambda n=n: relatorio_certo(n))
     else:
         raise ValueError('Nível de aprendizagem desconhecido.')
     passed=sum(t['passed'] for t in tests)

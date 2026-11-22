@@ -5,7 +5,7 @@
 // escala de um avião real, mas sem reproduzir nenhum aeroporto nem nenhuma companhia em concreto.
 import * as THREE from 'three';
 import { fundir, geometriaPessoa } from './baggage-hall-model.js?v=bagagens-3';
-import { criarCaminho } from './sorting-hall-model.js?v=embarque-1';
+import { criarCaminho } from './sorting-hall-model.js?v=relatorio-1';
 
 // Avião: s é a distância ao nariz, x é positivo para estibordo (o lado das portas de carga).
 export const A = {

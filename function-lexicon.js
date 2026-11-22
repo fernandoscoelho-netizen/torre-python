@@ -1,4 +1,4 @@
-import {GAME_FUNCTIONS} from './game-functions.js?v=embarque-1';
+import {GAME_FUNCTIONS} from './game-functions.js?v=relatorio-1';
 
 const $=id=>document.getElementById(id);
 const nameOf=item=>item.name.split('(')[0];

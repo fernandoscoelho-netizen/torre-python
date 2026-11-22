@@ -5,8 +5,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { geometriaMala } from './baggage-hall-model.js?v=bagagens-3';
-import { T, NOS, CAMINHOS, construirCentral } from './sorting-hall-model.js?v=checkin-1';
-import { prepararScada, desenharScada, zonaEm } from './sorting-scada.js?v=checkin-1';
+import { T, NOS, CAMINHOS, construirCentral } from './sorting-hall-model.js?v=placa-1';
+import { prepararScada, desenharScada, zonaEm } from './sorting-scada.js?v=placa-1';
 
 const H = 1 / 16;                                // intervalo mínimo entre duas malas no mesmo ponto (minutos)
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];
@@ -188,6 +188,7 @@ sala.innerHTML = `
   <select id="sh-vista" aria-label="Vista"><option value="geral">Vista geral</option><option value="leitor">Leitor de etiquetas</option><option value="desviadores">Desviadores</option><option value="saidas">Saídas e reboques</option><option value="inspecao">Inspeção</option><option value="sinotico">Sala de controlo</option></select>
   <button id="sh-checkin" title="Voltar à zona de check-in, de onde vieram estas malas" hidden>⬅<span class="sh-longo"> Check-in</span></button>
   <button id="sh-modo" title="Alternar entre a cena 3D e o sinótico SCADA">SCADA</button>
+  <button id="sh-placa" title="Seguir as malas até aos porões dos aviões, na placa" hidden><span class="sh-longo">Placa </span>➜</button>
   <button id="sh-fechar" title="Voltar à maquete do aeroporto"><span class="sh-longo">Aeroporto </span>✕</button>
 </div>`;
 viewport.append(sala);
@@ -564,6 +565,7 @@ function animar(agora) {
     }
     $('sh-play').textContent = aReproduzir ? 'Ⅱ' : '▶';
     $('sh-checkin').hidden = !window.checkinHall?.dados?.();
+    $('sh-placa').hidden = !window.rampHall?.dados?.();
     if (voo) { voo.k = Math.min(1, voo.k + dt / 0.9); const e = suave(voo.k); camera.position.lerpVectors(voo.p0, voo.p1, e); controls.target.lerpVectors(voo.a0, voo.a1, e); if (voo.k >= 1) voo = null; }
     controls.update();
     desenhar();
@@ -600,6 +602,7 @@ $('sh-play').onclick = () => { if (!dados) return; if (t >= fimVisual) t = dados
 $('sh-tempo').oninput = e => { t = Number(e.target.value); aReproduzir = false; };
 $('sh-vista').onchange = e => { seguir(null); selecao = null; vista(e.target.value); };
 $('sh-checkin').onclick = () => window.checkinHall?.abrir();
+$('sh-placa').onclick = () => window.rampHall?.abrir();
 $('sh-modo').onclick = () => { if (!renderer) construir(); modo(modoScada ? '3d' : 'scada'); };
 {
     const tela = $('sh-scada'), em = e => { const c = tela.getBoundingClientRect(); return zonaEm(zonasScada, e.clientX - c.left, e.clientY - c.top); };

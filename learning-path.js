@@ -1,4 +1,4 @@
-import {LEVELS} from './curriculum.js?v=checkin-1';
+import {LEVELS} from './curriculum.js?v=placa-1';
 const $=id=>document.getElementById(id),KEY='porto-python.learning.v1';let state={active:null,levels:{},drafts:{}},switching=false;
 try{const stored=JSON.parse(localStorage.getItem(KEY));if(stored&&typeof stored==='object')state={...state,...stored};}catch{}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch{$('learning-storage').textContent='O navegador não permitiu guardar o progresso.';}}

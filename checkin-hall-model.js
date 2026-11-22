@@ -5,7 +5,7 @@
 // à escala de um átrio real, mas sem reproduzir nenhum aeroporto em concreto.
 import * as THREE from 'three';
 import { fundir, geometriaPessoa } from './baggage-hall-model.js?v=bagagens-3';
-import { criarCaminho } from './sorting-hall-model.js?v=checkin-1';
+import { criarCaminho } from './sorting-hall-model.js?v=placa-1';
 
 export const K = {
     X0: -30, X1: 30, Z0: -14, Z1: 26, ALTURA: 9,
@@ -113,9 +113,14 @@ export function construirCheckin(scene, renderer) {
     horizontal(25.6, 2.5, M(AZUL, 0.85), 0, 0.004, -3.75);                                                // passadeira dos balcões
     horizontal(LARG, 5.3, M('#8f9498', 0.7), 0, 0.003, -11.35);                                           // zona técnica atrás dos balcões
     horizontal(1.9, 0.12, M('#f2c40f', 0.7), 0, 0.006, -0.25);                                            // linha de espera
-    const chao = (texto, x, z, w, cor = '#ffffff') => horizontal(w, w / 6, new THREE.MeshBasicMaterial({ map: tela(768, 128, (g) => { g.fillStyle = cor; g.font = 'bold 84px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(texto, 384, 68); }), transparent: true, opacity: 0.9 }), x, 0.008, z);
-    chao('AGUARDE AQUI A SUA VEZ', 0, -0.75, 4.2, '#16365f');
-    for (const [c, x] of Object.entries(K.BALCOES)) chao(c, x + K.DX_SECRETARIA, -3.1, 1.6);
+    // Texto pintado no chão: a tela tem a largura do texto (medido), para nunca ficar cortado
+    const medir = document.createElement('canvas').getContext('2d'); medir.font = 'bold 84px Arial, sans-serif';
+    const chao = (texto, x, z, alturaLetra, cor = '#ffffff') => {
+        const larg = Math.ceil(medir.measureText(texto).width) + 48, h = alturaLetra * 128 / 84;
+        return horizontal(h * larg / 128, h, new THREE.MeshBasicMaterial({ map: tela(larg, 128, (g) => { g.fillStyle = cor; g.font = 'bold 84px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(texto, larg / 2, 68); }), transparent: true, opacity: 0.9 }), x, 0.008, z);
+    };
+    chao('AGUARDE AQUI A SUA VEZ', 0, -0.8, 0.42, '#16365f');
+    for (const [c, x] of Object.entries(K.BALCOES)) chao(c, x + K.DX_SECRETARIA, -3.1, 0.175);
 
     // --- Paredes ---------------------------------------------------------------------
     const painel = tela(512, 512, (g, w, h) => {

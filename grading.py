@@ -1,6 +1,6 @@
 import copy, math, tempfile, pathlib
 
-_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim', 'baggage_fault', 'sorting_tags', 'sorting_routes', 'sorting_fault', 'checkin_validate', 'checkin_queue', 'checkin_tags'}
+_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim', 'baggage_fault', 'sorting_tags', 'sorting_routes', 'sorting_fault', 'checkin_validate', 'checkin_queue', 'checkin_tags', 'loading_plan', 'loading_balance', 'loading_reconcile'}
 
 def _grade_solution(source, ns, lesson):
     tests = []
@@ -511,6 +511,160 @@ def _grade_solution(source, ns, lesson):
                 for n in range(3):
                     check(f'Manhã {n + 1}: todas as etiquetas certas e sem repetições', lambda n=n: etiquetas_certas(n))
                     check(f'Manhã {n + 1}: na triagem, cada mala chega à saída do seu voo', lambda n=n: na_saida_certa(n))
+        elif lesson in ('loading_plan', 'loading_balance', 'loading_reconcile'):
+            import contextlib, io
+            POROES = ('DIANTEIRO', 'TRASEIRO', 'GRANEL')
+            def manha(n, cache={}):
+                # Volta a correr o programa do aluno noutra manhã (outras malas, outros aviões, voos noutros lugares)
+                if n not in cache:
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                        cache[n] = json.loads(_workspace_handle(source, '{"stands":[]}', 'loading', f'{lesson}#{n}'))
+                r = cache[n]
+                if not r['ok']:
+                    raise RuntimeError(r['error']['type'] + ': ' + r['error']['message'])
+                if not r['loading']:
+                    raise ValueError('O programa não chegou a simular o carregamento.')
+                return r
+            def eventos(n, tipo):
+                return [e for e in manha(n)['loading']['eventos'] if e['tipo'] == tipo]
+            def hora(m):
+                return f'{m // 60:02d}:{m % 60:02d}'
+            def a_horas(n):
+                reg = manha(n)['loading']
+                partidas = {e['voo']: e for e in eventos(n, 'partida')}
+                for v in reg['voos']:
+                    if v['voo'] not in partidas:
+                        raise ValueError(f"O voo {v['voo']} não chegou a partir.")
+                    if partidas[v['voo']]['atraso'] > 0:
+                        raise ValueError(f"O voo {v['voo']} partiu com {partidas[v['voo']]['atraso']} minutos de atraso. Vê as ocorrências.")
+                return True
+            def tudo_a_bordo(n):
+                reg = manha(n)['loading']
+                em_terra = reg['resumo']['malas']['em_terra']
+                if em_terra:
+                    raise ValueError(f"{em_terra} malas ficaram em terra. Vê as ocorrências.")
+                if not reg['resumo']['malas']['carregada']:
+                    raise ValueError('Não foi carregada nenhuma mala.')
+                return True
+            def aviao_teste(livres, bracos=(10.0, 24.0, 28.0), massas=((10000, 17.2),), limites=(10.0, 30.0)):
+                return {'voo': 'QX1', 'destino': 'Teste', 'hora': 600, 'lugar': 'P21', 'tipo': 'avião de teste',
+                        'poroes': {p: {'livre': l, 'braco': b} for p, l, b in zip(POROES, livres, bracos)},
+                        'massas': [{'nome': f'massa {i + 1}', 'peso': p, 'braco': b} for i, (p, b) in enumerate(massas)],
+                        'limite_frente': limites[0], 'limite_tras': limites[1]}
+            def malas_teste(pesos):
+                return [{'etiqueta': f'QX1-{i + 1:03d}' + ('H' if p > 23 else ''), 'voo': 'QX1', 'peso': p, 'reserva': f'R{i + 1:05d}'} for i, p in enumerate(pesos)]
+            def plano_valido(pesos_malas, livres, **extra):
+                # Chama distribuir e confere o plano: {porão: [etiquetas]}, cada mala uma vez, nenhum porão acima do livre
+                malas, aviao = malas_teste(pesos_malas), aviao_teste(livres, **extra)
+                plano = chamar('distribuir', malas, aviao)
+                if not isinstance(plano, dict):
+                    raise ValueError('distribuir tem de devolver um dicionário {porão: [etiquetas]}.')
+                peso = {m['etiqueta']: m['peso'] for m in malas}
+                vistas, limpo = set(), {p: [] for p in POROES}
+                for porao, lista in plano.items():
+                    if porao not in POROES:
+                        raise ValueError(f'Porão desconhecido no plano: {porao!r}.')
+                    for item in lista:
+                        etiqueta = item.get('etiqueta') if isinstance(item, dict) else item
+                        if etiqueta not in peso:
+                            raise ValueError(f'{item!r} não é uma das malas recebidas.')
+                        if etiqueta in vistas:
+                            raise ValueError(f'A mala {etiqueta} aparece duas vezes no plano.')
+                        vistas.add(etiqueta)
+                        limpo[porao].append(etiqueta)
+                if len(vistas) != len(malas):
+                    raise ValueError(f'Com malas de {list(pesos_malas)} kg e porões com {list(livres)} kg livres, {len(malas) - len(vistas)} malas ficaram fora do plano.')
+                somas = {p: sum(peso[e] for e in limpo[p]) for p in POROES}
+                for porao, livre in zip(POROES, livres):
+                    if somas[porao] > livre + 1e-6:
+                        raise ValueError(f'O porão {porao} ficou com {somas[porao]:g} kg e só tem {livre} kg livres.')
+                return limpo, peso, somas, aviao
+            def cg_de(aviao, somas):
+                momento = sum(m['peso'] * m['braco'] for m in aviao['massas']) + sum(somas[p] * aviao['poroes'][p]['braco'] for p in POROES)
+                return momento / (sum(m['peso'] for m in aviao['massas']) + sum(somas.values()))
+            if lesson == 'loading_plan':
+                def pesadas_primeiro():
+                    plano, peso, _, _ = plano_valido([12, 9, 15, 7, 20, 11, 25, 8], (60, 60, 30))
+                    for porao in POROES:
+                        lista = [peso[e] for e in plano[porao]]
+                        if lista != sorted(lista, reverse=True):
+                            raise ValueError(f'No porão {porao} a ordem de carga ficou {lista} kg: as mais pesadas têm de vir primeiro.')
+                    return True
+                check('O programa ordena as malas (sorted ou sort)', lambda: chama(None, 'sorted') or chama(None, 'sort'))
+                check('O programa usa programar_plano e simular_carregamento', lambda: chama(None, 'programar_plano') and chama(None, 'simular_carregamento'))
+                check('Todas as malas entram no plano, uma só vez', lambda: plano_valido([12, 9, 15, 7, 20, 11], (40, 40, 20)) and plano_valido([14.5], (20, 20, 20)) and plano_valido([], (20, 20, 20)))
+                check('Nenhum porão passa dos quilos livres (oito malas de 10 kg em porões de 30 kg)', lambda: plano_valido([10] * 8, (30, 30, 30)))
+                check('Um porão sem espaço fica vazio; malas de 20, 20, 30 e 30 kg cabem em dois porões de 50 kg começando pelas mais pesadas', lambda: plano_valido([20, 20, 30, 30], (50, 50, 0)))
+                check('Em cada porão, as mais pesadas primeiro', pesadas_primeiro)
+                def carga_certa(n):
+                    tudo_a_bordo(n)
+                    for e in eventos(n, 'plano'):
+                        if not e['ordenado']:
+                            raise ValueError(f"No plano do voo {e['voo']} há malas leves carregadas antes de malas mais pesadas do mesmo porão.")
+                    return a_horas(n)
+                for n in range(3):
+                    check(f'Manhã {n + 1}: todas as malas embarcam, das mais pesadas para as mais leves, e os voos partem à hora', lambda n=n: carga_certa(n))
+            elif lesson == 'loading_balance':
+                def cg(esperado, pesos, **extra):
+                    return abs(chamar('centragem', aviao_teste((1000, 1000, 1000), **extra), pesos) - esperado) < 1e-6
+                def plano_equilibrado(braco_vazio):
+                    _, _, somas, aviao = plano_valido([28, 26, 24, 22, 20, 20, 18, 16, 14, 12], (200, 200, 100), massas=((10000, braco_vazio),), limites=(17.0, 17.3))
+                    valor = cg_de(aviao, somas)
+                    if not 17.0 <= valor <= 17.3:
+                        raise ValueError(f'Avião de teste com limites 17.00 a 17.30 m: o plano devolvido dá um centro de gravidade de {valor:.2f} m '
+                                         f'(malas por porão: {somas}).')
+                    return True
+                check('centragem usa um ciclo for', lambda: usa('centragem', ast.For))
+                check('O programa usa programar_plano e simular_carregamento', lambda: chama(None, 'programar_plano') and chama(None, 'simular_carregamento'))
+                check('Sem malas: duas massas de 1000 kg, a 10 m e a 20 m, dão 15 m', lambda: cg(15.0, {}, massas=((1000, 10), (1000, 20))) and cg(15.0, {'DIANTEIRO': 0, 'TRASEIRO': 0, 'GRANEL': 0}, massas=((1000, 10), (1000, 20))))
+                check('Com 500 kg de malas num porão a 5 m do nariz, o centro de gravidade passa para 13 m', lambda: cg(13.0, {'DIANTEIRO': 500}, bracos=(5.0, 24.0, 28.0), massas=((1000, 10), (1000, 20))))
+                check('As malas de todos os porões contam, cada uma com o braço do seu porão', lambda: cg(16.92, {'DIANTEIRO': 300, 'TRASEIRO': 500, 'GRANEL': 200}, massas=((4000, 16),)))
+                check('Avião pesado de cauda: o plano que enche pela frente fica dentro dos limites', lambda: plano_equilibrado(17.395))
+                check('Avião pesado de nariz: o plano que enche por trás fica dentro dos limites', lambda: plano_equilibrado(16.871))
+                def centragem_certa(n):
+                    tudo_a_bordo(n)
+                    limites = {v['voo']: v['aviao'] for v in manha(n)['loading']['voos']}
+                    for e in eventos(n, 'fim_carga'):
+                        if not e['dentro']:
+                            a = limites[e['voo']]
+                            raise ValueError(f"Voo {e['voo']}: o carregamento acabou com o centro de gravidade a {e['cg']:.2f} m "
+                                             f"(limites {a['limite_frente']:.2f} a {a['limite_tras']:.2f} m).")
+                    return a_horas(n)
+                for n in range(3):
+                    check(f'Manhã {n + 1}: os quatro voos carregam todas as malas com a centragem dentro dos limites e partem à hora', lambda n=n: centragem_certa(n))
+            else:
+                def mala(numero, reserva, porao='DIANTEIRO'):
+                    return {'etiqueta': f'QX1-{numero:03d}', 'voo': 'QX1', 'peso': 10.0 + numero, 'reserva': reserva, 'porao': porao}
+                carga = [mala(1, 'AAA111'), mala(2, 'BBB222', 'TRASEIRO'), mala(3, 'CCC333'), mala(4, 'BBB222', 'GRANEL'), mala(5, 'DDD444', 'TRASEIRO')]
+                def retira(embarcados, esperado, malas=carga):
+                    r = chamar('malas_a_retirar', malas, embarcados)
+                    if not isinstance(r, (set, frozenset)):
+                        raise ValueError(f'malas_a_retirar tem de devolver um conjunto (set) e devolveu {type(r).__name__}.')
+                    return r == set(esperado)
+                d = defn('malas_a_retirar')
+                check('malas_a_retirar usa conjuntos', lambda: d is not None and any(isinstance(n, (ast.Set, ast.SetComp)) or (isinstance(n, ast.Call) and getattr(n.func, 'id', None) in ('set', 'frozenset')) for n in ast.walk(d)))
+                check('O programa usa programar_reconciliacao, simular_checkin, simular_triagem e simular_carregamento', lambda: all(chama(None, f) for f in ('programar_reconciliacao', 'simular_checkin', 'simular_triagem', 'simular_carregamento')))
+                check('Faltou um passageiro com uma mala: sai essa mala', lambda: retira(['AAA111', 'BBB222', 'DDD444'], {'QX1-003'}))
+                check('Faltou um passageiro com duas malas: saem as duas', lambda: retira(['AAA111', 'CCC333', 'DDD444'], {'QX1-002', 'QX1-004'}))
+                check('Cartões lidos duas vezes e passageiros sem mala não confundem', lambda: retira(['DDD444', 'ZZZ999', 'AAA111', 'DDD444', 'CCC333', 'YYY888', 'AAA111'], {'QX1-002', 'QX1-004'}))
+                check('Todos embarcaram: conjunto vazio', lambda: retira(['AAA111', 'BBB222', 'CCC333', 'DDD444'], set()) and retira(['AAA111'], set(), malas=[]))
+                check('Ninguém embarcou: saem todas as malas', lambda: retira([], {'QX1-001', 'QX1-002', 'QX1-003', 'QX1-004', 'QX1-005'}))
+                def reconciliado(n):
+                    reg = manha(n)['loading']
+                    if reg.get('origem') != 'triagem':
+                        raise ValueError('O programa tem de correr simular_checkin(), simular_triagem() e, só depois, simular_carregamento().')
+                    if not eventos(n, 'carga'):
+                        raise ValueError('Não foi carregada nenhuma mala.')
+                    dono = {m['etiqueta']: m for m in reg['malas']}
+                    for e in eventos(n, 'descarga'):
+                        m = dono[e['mala']]
+                        if e['manual']:
+                            raise ValueError(f"Voo {e['voo']}: a mala {e['mala']} de {m['nome']} (reserva {m['reserva']}) ficou a bordo e o dono não embarcou.")
+                        if not e['certa']:
+                            raise ValueError(f"Voo {e['voo']}: a mala {e['mala']} de {m['nome']} (reserva {m['reserva']}) foi retirada e o dono embarcou.")
+                    return a_horas(n)
+                for n in range(3):
+                    check(f'Manhã {n + 1}, do check-in ao porão: só saem as malas de quem não embarcou e os voos partem à hora', lambda n=n: reconciliado(n))
     else:
         raise ValueError('Nível de aprendizagem desconhecido.')
     passed=sum(t['passed'] for t in tests)

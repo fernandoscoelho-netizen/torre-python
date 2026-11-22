@@ -5,8 +5,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { geometriaMala, geometriaPessoa } from './baggage-hall-model.js?v=bagagens-3';
-import { criarCaminho } from './sorting-hall-model.js?v=checkin-1';
-import { K, CAMINHOS_MALA, D_BALANCA, FILA, COMP_BAIAS, construirCheckin } from './checkin-hall-model.js?v=checkin-1';
+import { criarCaminho } from './sorting-hall-model.js?v=placa-1';
+import { K, CAMINHOS_MALA, D_BALANCA, FILA, COMP_BAIAS, construirCheckin } from './checkin-hall-model.js?v=placa-1';
 
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];
 const COR_SEM_VOO = '#8a8f96', COR_ILEGIVEL = '#f4f4ee';

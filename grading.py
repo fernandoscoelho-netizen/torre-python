@@ -1,6 +1,6 @@
 import copy, math, tempfile, pathlib
 
-_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim', 'baggage_fault', 'sorting_tags', 'sorting_routes', 'sorting_fault'}
+_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim', 'baggage_fault', 'sorting_tags', 'sorting_routes', 'sorting_fault', 'checkin_validate', 'checkin_queue', 'checkin_tags'}
 
 def _grade_solution(source, ns, lesson):
     tests = []
@@ -378,6 +378,139 @@ def _grade_solution(source, ns, lesson):
                         texto = ' e '.join(f'{a[0]}–{a[1]} às {a[2] // 60:02d}:{a[2] % 60:02d}' for a in _MANHAS[n]['avarias'])
                         check(f'Manhã {n + 1} (avaria {texto}): cada mala na saída do seu voo', lambda n=n: bem_triadas(n))
                         check(f'Manhã {n + 1}: rotas fora do troço avariado até 1 minuto depois', lambda n=n: rotas_corrigidas(n))
+        elif lesson in ('checkin_validate', 'checkin_queue', 'checkin_tags'):
+            import contextlib, io
+            def manha(n, cache={}):
+                # Volta a correr o programa do aluno noutra manhã (outros passageiros, outro balcão fechado, voos noutras saídas)
+                if n not in cache:
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                        cache[n] = json.loads(_workspace_handle(source, '{"stands":[]}', 'checkin', f'{lesson}#{n}'))
+                r = cache[n]
+                if not r['ok']:
+                    raise RuntimeError(r['error']['type'] + ': ' + r['error']['message'])
+                if not r['checkin']:
+                    raise ValueError('O programa não chegou a simular o check-in.')
+                return r
+            def eventos(n, tipo):
+                return [e for e in manha(n)['checkin']['eventos'] if e['tipo'] == tipo]
+            def nomes(n):
+                return {p['reserva']: p for p in manha(n)['checkin']['passageiros']}
+            def todos_atendidos(n):
+                reg = manha(n)['checkin']
+                falta = reg['resumo']['passageiros']
+                por_atender = falta['a_chegar'] + falta['na_fila'] + falta['no_balcao']
+                if por_atender:
+                    raise ValueError(f'{por_atender} passageiros não chegaram a ser atendidos.')
+                return True
+            if lesson == 'checkin_validate':
+                def passageiro(**mudar):
+                    return {**dict(reserva='AB12CD', nome='Teste', voo='PY101', documento='CC', malas=[12.5], chegada=500), **mudar}
+                def diz(esperado, minuto=500, **mudar):
+                    return chamar('validar', passageiro(**mudar), minuto) == esperado
+                check('validar usa if', lambda: usa('validar', ast.If))
+                check('O programa usa programar_validacao', lambda: chama(None, 'programar_validacao'))
+                check('Passageiro em ordem: "OK" (com uma mala, com duas e sem malas)', lambda: diz('OK') and diz('OK', malas=[8.0, 21.3]) and diz('OK', malas=[]) and diz('OK', documento='passaporte', reserva='9Z8Y7X'))
+                check('Reserva com 5 ou com 7 caracteres: "reserva inválida"', lambda: diz('reserva inválida', reserva='AB12C') and diz('reserva inválida', reserva='AB12CDE') and diz('reserva inválida', reserva=''))
+                check('Reserva com minúsculas ou com símbolos: "reserva inválida"', lambda: diz('reserva inválida', reserva='ab12cd') and diz('reserva inválida', reserva='AB1-CD') and diz('reserva inválida', reserva='AB 2CD'))
+                check('Documento None ou vazio: "sem documento"', lambda: diz('sem documento', documento=None) and diz('sem documento', documento=''))
+                check('Voo que não está nas partidas: "voo desconhecido"', lambda: diz('voo desconhecido', voo='PY999') and diz('voo desconhecido', voo='PY900', minuto=700))
+                check('Fecho 40 minutos antes da partida: aceita às 09:19 e recusa às 09:20 (PY101, 10:00)', lambda: diz('OK', minuto=559) and diz('check-in fechado', minuto=560) and diz('check-in fechado', minuto=575))
+                check('O fecho depende do voo: PY104 (10:30) aceita às 09:49 e recusa às 09:50', lambda: diz('OK', voo='PY104', minuto=589) and diz('check-in fechado', voo='PY104', minuto=590))
+                check('Mala com 32 kg é aceite; com mais de 32, com 0 ou negativa: "peso inválido"', lambda: diz('OK', malas=[32]) and diz('peso inválido', malas=[32.1]) and diz('peso inválido', malas=[0]) and diz('peso inválido', malas=[-3.0]))
+                check('Basta uma mala inválida, mesmo que seja a segunda', lambda: diz('peso inválido', malas=[10.0, 40.0]))
+                check('Com dois problemas, devolve o primeiro pela ordem do enunciado', lambda: diz('reserva inválida', reserva='x', documento=None) and diz('sem documento', documento=None, voo='PY999') and diz('check-in fechado', minuto=600, malas=[50]))
+                def decisoes_certas(n):
+                    todos_atendidos(n)
+                    quem = nomes(n)
+                    for e in eventos(n, 'decisao'):
+                        if not e['certo']:
+                            p = quem[e['reserva']]
+                            devia = e['problemas'][0] if e['problemas'] else 'OK'
+                            raise ValueError(f"{p['nome']} (reserva {p['reserva']}, voo {p['voo']}) recebeu \"{e['motivo'] or 'OK'}\" e devia receber \"{devia}\".")
+                    return True
+                for n in range(3):
+                    check(f'Manhã {n + 1}: todos os passageiros recebem a decisão certa', lambda n=n: decisoes_certas(n))
+            elif lesson == 'checkin_queue':
+                def reserva_de(resposta):
+                    return resposta.get('reserva') if isinstance(resposta, dict) else resposta
+                def pessoa(reserva, voo, chegada=480):
+                    return dict(reserva=reserva, nome='Teste ' + reserva, voo=voo, documento='CC', malas=[], chegada=chegada)
+                def sequencia(entradas, minuto, esperado):
+                    # Fila vazia no fim da manhã: entram os passageiros de teste e são chamados um a um
+                    if ns['chamar']('B01', minuto) is not None:
+                        raise ValueError('Depois da simulação a fila devia estar vazia e chamar devolveu um passageiro.')
+                    for p in entradas:
+                        ns['entrar'](dict(p))
+                    saida = [reserva_de(ns['chamar']('B01', minuto)) for _ in entradas]
+                    return saida == esperado and ns['chamar']('B02', minuto) is None
+                a, b, c = pessoa('T1', 'PY104'), pessoa('T2', 'PY104'), pessoa('T3', 'PY103')
+                u = pessoa('T4', 'PY101')
+                x = pessoa('T5', 'PY900')
+                check('O programa define entrar e chamar e usa programar_fila', lambda: defn('entrar') is not None and defn('chamar') is not None and chama(None, 'programar_fila'))
+                check('Fila vazia: chamar devolve None', lambda: sequencia([], 480, []))
+                check('Sem urgentes, a ordem é a de chegada (FIFO)', lambda: sequencia([a, b, c], 480, ['T1', 'T2', 'T3']))
+                check('Um urgente (faltam 10 minutos para o fecho do PY101) passa à frente', lambda: sequencia([a, u, b], 550, ['T4', 'T1', 'T2']))
+                check('Faltam 16 minutos: ainda não é urgente; faltam 15: já é', lambda: sequencia([a, u], 544, ['T1', 'T4']) and sequencia([a, u], 545, ['T4', 'T1']))
+                check('Entre urgentes, primeiro o que está há mais tempo na fila', lambda: sequencia([a, pessoa('T6', 'PY102'), u], 558, ['T6', 'T4', 'T1']))
+                check('Voo desconhecido não dá erro e nunca é urgente', lambda: sequencia([x, a], 700, ['T1', 'T5']) and sequencia([x], 480, ['T5']))
+                def fila_certa(n):
+                    reg = manha(n)['checkin']
+                    quem = nomes(n)
+                    for e in eventos(n, 'decisao'):
+                        if e['perdeu']:
+                            p = quem[e['reserva']]
+                            raise ValueError(f"{p['nome']} chegou às {p['chegada'] // 60:02d}:{p['chegada'] % 60:02d}, antes do fecho do voo {p['voo']}, e só foi chamado às {e['minuto'] // 60:02d}:{e['minuto'] % 60:02d}.")
+                    todos_atendidos(n)
+                    for e in eventos(n, 'chamada'):
+                        p = quem[e['reserva']]
+                        hora = f"{e['minuto'] // 60:02d}:{e['minuto'] % 60:02d}"
+                        if e['urgentes'] and not e['urgente']:
+                            raise ValueError(f"Às {hora} havia {e['urgentes']} passageiros urgentes na fila e foi chamado {p['nome']} (voo {p['voo']}), que não era urgente.")
+                        if not e['urgentes'] and e['posicao']:
+                            raise ValueError(f"Às {hora} não havia urgentes e foi chamado {p['nome']}, que tinha {e['posicao']} passageiros à frente.")
+                        if not e['primeiro_do_voo']:
+                            raise ValueError(f"Às {hora} foi chamado {p['nome']} antes de outro passageiro do voo {p['voo']} que chegou primeiro.")
+                    return True
+                for n in range(3):
+                    check(f'Manhã {n + 1} (balcão {_BALCAO_FECHADO[n]} fechado): ninguém perde o voo na fila e a ordem é respeitada', lambda n=n: fila_certa(n))
+            else:
+                def etiquetas(voo, pesos):
+                    return [chamar('criar_etiqueta', voo, peso) for peso in pesos]
+                check('criar_etiqueta usa if', lambda: usa('criar_etiqueta', ast.If))
+                check('O programa usa programar_etiquetas, simular_checkin e simular_triagem', lambda: chama(None, 'programar_etiquetas') and chama(None, 'simular_checkin') and chama(None, 'simular_triagem'))
+                check('Numeração seguida dentro do voo: QX1-001, QX1-002, QX1-003', lambda: etiquetas('QX1', [10, 12.5, 8]) == ['QX1-001', 'QX1-002', 'QX1-003'])
+                check('Cada voo tem a sua numeração', lambda: etiquetas('QX2', [10, 10]) == ['QX2-001', 'QX2-002'] and etiquetas('QX3', [10]) == ['QX3-001'] and etiquetas('QX2', [10]) == ['QX2-003'])
+                check('Três algarismos: a décima mala é a 010', lambda: etiquetas('QX4', [10] * 10)[-1] == 'QX4-010')
+                check('H só nas malas com mais de 23 kg (23 kg ainda não leva)', lambda: etiquetas('QX5', [23.1, 23, 31.9, 7]) == ['QX5-001H', 'QX5-002', 'QX5-003H', 'QX5-004'])
+                def etiquetas_certas(n):
+                    todos_atendidos(n)
+                    malas = eventos(n, 'mala')
+                    if not malas:
+                        raise ValueError('Nenhuma mala foi etiquetada.')
+                    for e in malas:
+                        if not e['certa']:
+                            raise ValueError(f"A mala de {e['peso']} kg despachada no balcão {e['balcao']} ficou com a etiqueta {e['etiqueta']!r}. Vê as ocorrências.")
+                    return True
+                def na_saida_certa(n):
+                    r = manha(n)
+                    reg = r['sorting']
+                    if not reg or reg.get('origem') != 'checkin':
+                        raise ValueError('O programa tem de correr simular_checkin() e, a seguir, simular_triagem().')
+                    saida_do_voo = {p['voo']: p['saida'] for p in reg['partidas']}
+                    fim = {e['mala']: e for e in reg['eventos'] if e['tipo'] == 'mala' and e['estado'] != 'em_tapete'}
+                    if len(reg['malas']) != r['checkin']['resumo']['malas']:
+                        raise ValueError('Nem todas as malas do check-in entraram na central de triagem.')
+                    for mala in reg['malas']:
+                        e = fim.get(mala['codigo'])
+                        if e is None:
+                            raise ValueError(f"A mala {mala['codigo']} não chegou a nenhuma saída.")
+                        if e['estado'] != 'triada' or e['saida'] != saida_do_voo.get(mala['voo']):
+                            onde = 'inspeção' if e['estado'] == 'inspecao' else e['saida']
+                            raise ValueError(f"A mala {mala['codigo']} do voo {mala['voo']} devia sair em {saida_do_voo.get(mala['voo'])} e acabou em {onde}.")
+                    return True
+                for n in range(3):
+                    check(f'Manhã {n + 1}: todas as etiquetas certas e sem repetições', lambda n=n: etiquetas_certas(n))
+                    check(f'Manhã {n + 1}: na triagem, cada mala chega à saída do seu voo', lambda n=n: na_saida_certa(n))
     else:
         raise ValueError('Nível de aprendizagem desconhecido.')
     passed=sum(t['passed'] for t in tests)

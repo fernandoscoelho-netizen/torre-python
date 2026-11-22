@@ -180,6 +180,7 @@ class CentralTriagem:
             for saida in self.saidas:
                 self.rotas[saida] = encontrar_rota(self.rede(), 'LEITOR', saida)
         self._rotas_iniciais = {s: list(r) for s, r in self.rotas.items()}
+        self.origem = 'cenario'    # 'checkin' quando as malas vêm da zona de check-in (Fase 3)
 
     # --- registo -------------------------------------------------------------
     def _evento(self, tipo, **dados):
@@ -257,6 +258,32 @@ class CentralTriagem:
         if self.rotas.get(saida) != rota:
             self.rotas[saida] = rota
             self._evento('rota', saida=saida, rota=rota)
+
+    def receber_malas(self, malas):
+        """Troca as malas do cenário pelas que foram etiquetadas no check-in (Fase 3).
+
+        Cada mala é um dicionário com codigo, voo, peso, legivel, entrada (C1 ou C2) e minuto
+        (aquele em que chega ao fim do tapete coletor). Só pode ser chamado antes de a triagem começar.
+        """
+        if self.minuto != self.inicio or any(e['tipo'] == 'mala' for e in self.eventos):
+            raise TransicaoInvalida('A triagem já começou: as malas do check-in têm de entrar antes.')
+        self.malas = []
+        for partida in self.partidas.values():
+            partida.malas = []
+        self._checkin = {e: deque() for e in self.entradas}
+        for dados in sorted(malas, key=lambda d: d['minuto']):
+            if dados['entrada'] not in self._checkin:
+                raise KeyError(f"Entrada desconhecida: {dados['entrada']}")
+            mala = Mala(dados['codigo'], dados['voo'], dados['peso'], legivel=dados.get('legivel', True))
+            mala.entrada, mala.minuto_checkin = dados['entrada'], max(self.inicio, dados['minuto'])
+            self.malas.append(mala)
+            self._checkin[mala.entrada].append(mala)
+            if mala.voo in self.partidas:
+                self.partidas[mala.voo].malas.append(mala)
+        self._por_codigo = {m.codigo: m for m in self.malas}
+        if len(self._por_codigo) != len(self.malas):
+            raise ValueError('Há malas do check-in com o mesmo código.')
+        self.origem = 'checkin'
 
     def agendar_avaria(self, origem, destino, minuto, duracao=DURACAO_AVARIA):
         self._troco(origem, destino)
@@ -440,7 +467,7 @@ class CentralTriagem:
         """
         if not self.eventos:
             return None
-        return {'inicio': self.inicio, 'fim': self.minuto, 'debito': DEBITO,
+        return {'inicio': self.inicio, 'fim': self.minuto, 'debito': DEBITO, 'origem': self.origem,
                 'nos': {no: TIPOS_NO.get(no, 'desviador') for no in self.nos},
                 'trocos': [{'codigo': t.codigo, 'origem': t.origem, 'destino': t.destino, 'tempo': t.tempo,
                             'capacidade': t.capacidade} for t in self.trocos.values()],

@@ -5,8 +5,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { geometriaMala } from './baggage-hall-model.js?v=bagagens-3';
-import { T, NOS, CAMINHOS, construirCentral } from './sorting-hall-model.js?v=triagem-1';
-import { prepararScada, desenharScada, zonaEm } from './sorting-scada.js?v=triagem-1';
+import { T, NOS, CAMINHOS, construirCentral } from './sorting-hall-model.js?v=checkin-1';
+import { prepararScada, desenharScada, zonaEm } from './sorting-scada.js?v=checkin-1';
 
 const H = 1 / 16;                                // intervalo mínimo entre duas malas no mesmo ponto (minutos)
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];
@@ -137,6 +137,8 @@ estilo.textContent = `
 .sh-controlos{position:absolute;left:14px;right:14px;bottom:14px;display:flex;gap:8px;align-items:center;background:#14273ae8;color:#e8eef2;border-radius:6px;padding:8px 10px;font:13px system-ui,sans-serif}
 .sh-controlos input[type=range]{flex:1;min-width:60px}
 .sh-controlos button,.sh-controlos select{background:#2d4b63;color:#fff;border:1px solid #ffffff33;border-radius:4px;padding:4px 9px;font:inherit;cursor:pointer}
+.sh-controlos button{white-space:nowrap}
+.sh-controlos button[hidden]{display:none}
 .sh-hora{font-variant-numeric:tabular-nums;min-width:44px;text-align:center;font-weight:650}
 .sh-seguir{position:absolute;right:14px;top:12px;max-width:290px;font-size:12px}
 .sh-seguir ol{margin:6px 0 0 18px;padding:0;max-height:180px;overflow:auto}
@@ -157,6 +159,8 @@ estilo.textContent = `
 .sh-contadores span{font-size:10px}
 .sh-controlos{left:8px;right:8px;bottom:8px;gap:5px;padding:6px 7px;font-size:12px}
 .sh-controlos button,.sh-controlos select{padding:3px 5px}
+.sh-controlos select{max-width:104px}
+.sh-longo{display:none}
 .sh-seguir{right:8px;top:auto;bottom:52px;max-width:230px}
 .sh-seguir ol{max-height:84px}
 }
@@ -182,8 +186,9 @@ sala.innerHTML = `
   <input type="range" id="sh-tempo" min="0" max="1" step="0.002" value="0" aria-label="Hora simulada">
   <select id="sh-velocidade" aria-label="Velocidade"><option value="0.1">0,1 min/s</option><option value="0.25" selected>0,25 min/s</option><option value="0.5">0,5 min/s</option><option value="1">1 min/s</option><option value="2">2 min/s</option><option value="4">4 min/s</option></select>
   <select id="sh-vista" aria-label="Vista"><option value="geral">Vista geral</option><option value="leitor">Leitor de etiquetas</option><option value="desviadores">Desviadores</option><option value="saidas">Saídas e reboques</option><option value="inspecao">Inspeção</option><option value="sinotico">Sala de controlo</option></select>
+  <button id="sh-checkin" title="Voltar à zona de check-in, de onde vieram estas malas" hidden>⬅<span class="sh-longo"> Check-in</span></button>
   <button id="sh-modo" title="Alternar entre a cena 3D e o sinótico SCADA">SCADA</button>
-  <button id="sh-fechar" title="Voltar à maquete do aeroporto">Aeroporto ✕</button>
+  <button id="sh-fechar" title="Voltar à maquete do aeroporto"><span class="sh-longo">Aeroporto </span>✕</button>
 </div>`;
 viewport.append(sala);
 const botaoAbrir = document.createElement('button');
@@ -558,6 +563,7 @@ function animar(agora) {
         if (t >= fimVisual) aReproduzir = false;
     }
     $('sh-play').textContent = aReproduzir ? 'Ⅱ' : '▶';
+    $('sh-checkin').hidden = !window.checkinHall?.dados?.();
     if (voo) { voo.k = Math.min(1, voo.k + dt / 0.9); const e = suave(voo.k); camera.position.lerpVectors(voo.p0, voo.p1, e); controls.target.lerpVectors(voo.a0, voo.a1, e); if (voo.k >= 1) voo = null; }
     controls.update();
     desenhar();
@@ -593,6 +599,7 @@ $('sh-fechar').onclick = fechar;
 $('sh-play').onclick = () => { if (!dados) return; if (t >= fimVisual) t = dados.inicio; aReproduzir = !aReproduzir; };
 $('sh-tempo').oninput = e => { t = Number(e.target.value); aReproduzir = false; };
 $('sh-vista').onchange = e => { seguir(null); selecao = null; vista(e.target.value); };
+$('sh-checkin').onclick = () => window.checkinHall?.abrir();
 $('sh-modo').onclick = () => { if (!renderer) construir(); modo(modoScada ? '3d' : 'scada'); };
 {
     const tela = $('sh-scada'), em = e => { const c = tela.getBoundingClientRect(); return zonaEm(zonasScada, e.clientX - c.left, e.clientY - c.top); };

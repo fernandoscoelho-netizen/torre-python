@@ -73,7 +73,7 @@ def _preparar_dados(voos_json=None):
 _STDLIB_PROTEGIDOS = {'random', 'math', 'csv', 'json', 'datetime', 'time', 'os', 'sys', 'collections', 'statistics',
                       'zoneinfo', 'string', 're', 'io', 'pathlib', 'typing', 'copy', 'itertools', 'functools', 'ast',
                       'tempfile', 'traceback', 'textwrap', 'enum', 'dataclasses', 'decimal', 'fractions', 'operator',
-                      'bagagens', 'triagem'}
+                      'bagagens', 'triagem', 'checkin'}
 _PROJETO = {'dir': None, 'nomes': set()}
 
 
@@ -108,7 +108,7 @@ def _preparar_modulos(files_json):
 
 
 def _modulo_motor(nome):
-    """Motores do Bloco 2 (bagagens.py, triagem.py): no navegador vêm do Worker; nos testes, da pasta do projeto."""
+    """Motores do Bloco 2 (bagagens.py, triagem.py, checkin.py): no navegador vêm do Worker; nos testes, da pasta do projeto."""
     modulo = sys.modules.get(nome)
     if modulo is not None:
         return modulo
@@ -162,9 +162,10 @@ def _cenario_triagem(lesson_id):
     nivel, _, variante = str(lesson_id or '').partition('#')
     n = int(variante or 0)
     manha = _MANHAS[n]
-    partidas = [tri.criar_partida(voo, destino, hora, saida, 36, semente=n + 1, ilegiveis=ilegiveis)
+    do_checkin = nivel.startswith('checkin_')     # nestes níveis as malas só existem depois de simular o check-in
+    partidas = [tri.criar_partida(voo, destino, hora, saida, 0 if do_checkin else 36, semente=n + 1, ilegiveis=0 if do_checkin else ilegiveis)
                 for (voo, destino, hora, ilegiveis), saida in zip(_PARTIDAS, manha['saidas'])]
-    central = tri.CentralTriagem(partidas, semente=n + 1, sem_voo=3, programar=nivel != 'sorting_tags', rotas=nivel != 'sorting_routes')
+    central = tri.CentralTriagem(partidas, semente=n + 1, sem_voo=0 if do_checkin else 3, programar=nivel != 'sorting_tags', rotas=nivel != 'sorting_routes')
     if nivel == 'sorting_routes' and manha['fora']:
         central.agendar_avaria(*manha['fora'], central.inicio, duracao=600)     # troço fora de serviço toda a manhã
         central._inicio_do_minuto()
@@ -172,6 +173,21 @@ def _cenario_triagem(lesson_id):
         for avaria in manha['avarias']:
             central.agendar_avaria(*avaria)
     return central
+
+
+# Cenários do check-in: os mesmos voos da triagem; em cada manhã há um balcão fechado e passageiros diferentes.
+_BALCAO_FECHADO = ['B06', 'B03', 'B05']
+_PASSAGEIROS_POR_VOO = 36
+
+
+def _cenario_checkin(lesson_id, central):
+    ck = _modulo_motor('checkin')
+    nivel, _, variante = str(lesson_id or '').partition('#')
+    n = int(variante or 0)
+    partidas = central.consultar_partidas()
+    passageiros = ck.criar_passageiros(partidas, semente=n + 1, por_voo=_PASSAGEIROS_POR_VOO)
+    return ck.CheckIn(partidas, passageiros, fechados=(_BALCAO_FECHADO[n],), validar=nivel != 'checkin_validate',
+                      fila=nivel != 'checkin_queue', etiquetas=nivel != 'checkin_tags')
 
 
 def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', files_json='{}'):
@@ -328,7 +344,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
         def transferir_voo(voo, tapete):
             _sala.transferir_voo(voo, tapete)
         def ocorrencias():
-            return [dict(o) for o in sorted(_sala.ocorrencias + _central.ocorrencias, key=lambda o: o['minuto'])]
+            return [dict(o) for o in sorted(_sala.ocorrencias + _balcoes.ocorrencias + _central.ocorrencias, key=lambda o: o['minuto'])]
         def contar_malas(voo, estado=None):
             if estado is not None and estado not in _bag.ESTADOS_MALA:
                 raise ValueError('Estado desconhecido. Usa um destes: ' + ', '.join(_bag.ESTADOS_MALA) + '.')
@@ -356,8 +372,25 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             if controlador is not None and not callable(controlador):
                 raise TypeError('simular_triagem recebe uma função, por exemplo simular_triagem(reagir).')
             fim = None if ate is None else _minutes(ate)
+            if _balcoes.simulado and _central.origem != 'checkin' and _central.minuto == _central.inicio:
+                _central.receber_malas(_balcoes.malas_para_triagem())
             _central.correr(None if controlador is None else (lambda central, minuto: controlador(minuto)), ate=fim)
             return _central.resumo()
+        _balcoes = _cenario_checkin(lesson_id, _central)
+        def consultar_passageiros():
+            return _balcoes.consultar_passageiros()
+        def consultar_balcoes():
+            return _balcoes.consultar_balcoes()
+        def programar_validacao(funcao):
+            _balcoes.programar_validacao(funcao)
+        def programar_fila(entrar, chamar):
+            _balcoes.programar_fila(entrar, chamar)
+        def programar_etiquetas(funcao):
+            _balcoes.programar_etiquetas(funcao)
+        def simular_checkin(ate=None):
+            fim = None if ate is None else _minutes(ate)
+            _balcoes.correr(ate=fim)
+            return _balcoes.resumo()
         def _entrada(mensagem=''):
             print(mensagem, end='')
             try:
@@ -371,6 +404,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
         api.update(consultar_voos=consultar_voos, voos_para=voos_para, contar_voos=contar_voos, hora_atual=hora_atual, pista_livre=pista_livre, reservar_pista=reservar_pista, autorizar=autorizar, ao_minuto=ao_minuto, input=_entrada, voos=consultar_voos(), MAX_VOOS=100, HORA_INICIAL=360)
         api.update(consultar_tapetes=consultar_tapetes, atribuir_tapete=atribuir_tapete, iniciar_motor=iniciar_motor, parar_motor=parar_motor, libertar_tapete=libertar_tapete, contar_malas=contar_malas, simular_bagagens=simular_bagagens, estado_tapete=estado_tapete, transferir_voo=transferir_voo, ocorrencias=ocorrencias)
         api.update(consultar_partidas=consultar_partidas, consultar_rede=consultar_rede, programar_leitor=programar_leitor, definir_rota=definir_rota, consultar_rotas=consultar_rotas, estado_troco=estado_troco, simular_triagem=simular_triagem)
+        api.update(consultar_passageiros=consultar_passageiros, consultar_balcoes=consultar_balcoes, programar_validacao=programar_validacao, programar_fila=programar_fila, programar_etiquetas=programar_etiquetas, simular_checkin=simular_checkin)
         if mode in ('run', 'assess'):
             _preparar_dados()
             _preparar_modulos(files_json)
@@ -386,7 +420,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             variables.append({'name': name, 'type': type(value).__name__, 'value': representation[:180]})
             if len(variables) >= 30:
                 break
-        return json.dumps({'ok': True, 'mode': mode, 'actions': actions, 'variables': variables, 'grade': _grade_solution(source, namespace, lesson_id) if mode == 'assess' else None, 'baggage': _sala.registo(), 'sorting': _central.registo()}, ensure_ascii=False)
+        return json.dumps({'ok': True, 'mode': mode, 'actions': actions, 'variables': variables, 'grade': _grade_solution(source, namespace, lesson_id) if mode == 'assess' else None, 'baggage': _sala.registo(), 'sorting': _central.registo(), 'checkin': _balcoes.registo()}, ensure_ascii=False)
     except BaseException as error:
         line = getattr(error, 'lineno', None)
         modulo = None

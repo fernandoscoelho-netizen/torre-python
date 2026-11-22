@@ -1,6 +1,6 @@
 import copy, math, tempfile, pathlib
 
-_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim', 'baggage_fault', 'sorting_tags', 'sorting_routes', 'sorting_fault', 'checkin_validate', 'checkin_queue', 'checkin_tags', 'loading_plan', 'loading_balance', 'loading_reconcile'}
+_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim', 'baggage_fault', 'sorting_tags', 'sorting_routes', 'sorting_fault', 'checkin_validate', 'checkin_queue', 'checkin_tags', 'loading_plan', 'loading_balance', 'loading_reconcile', 'boarding_security', 'boarding_gate', 'boarding_files'}
 
 def _grade_solution(source, ns, lesson):
     tests = []
@@ -665,6 +665,247 @@ def _grade_solution(source, ns, lesson):
                     return a_horas(n)
                 for n in range(3):
                     check(f'Manhã {n + 1}, do check-in ao porão: só saem as malas de quem não embarcou e os voos partem à hora', lambda n=n: reconciliado(n))
+        elif lesson in ('boarding_security', 'boarding_gate', 'boarding_files'):
+            import contextlib, io, os
+            def manha(n, cache={}):
+                # Volta a correr o programa do aluno noutra manhã (outros passageiros, outra linha fechada, voos noutras portas)
+                if n not in cache:
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                        cache[n] = json.loads(_workspace_handle(source, '{"stands":[]}', 'boarding', f'{lesson}#{n}'))
+                    caminho = _pasta_dados() + '/faltas.json'
+                    cache[n]['_faltas'] = open(caminho, encoding='utf-8').read() if os.path.exists(caminho) else None
+                r = cache[n]
+                if not r['ok']:
+                    raise RuntimeError(r['error']['type'] + ': ' + r['error']['message'])
+                if not r['boarding']:
+                    raise ValueError('O programa não chegou a simular o embarque.')
+                return r
+            def eventos(n, tipo, zona='boarding'):
+                return [e for e in manha(n)[zona]['eventos'] if e['tipo'] == tipo]
+            def classe(nome, base=None):
+                alvo = ns.get(nome)
+                if not isinstance(alvo, type):
+                    raise ValueError(f'Define a classe {nome} no teu programa.')
+                if base is not None and not issubclass(alvo, base):
+                    raise ValueError(f'{nome} tem de herdar de {base.__name__}: class {nome}({base.__name__}).')
+                return alvo
+            def pessoa(i):
+                return {'reserva': f'R{i:05d}', 'nome': f'Passageiro {i}', 'voo': 'QX1', 'hora': 600, 'chegada': 500 + i}
+            if lesson == 'boarding_security':
+                def linha(codigo='L9', tempo=2, pessoas=0, inicio=1):
+                    l = classe('Linha')(codigo, tempo)
+                    for i in range(pessoas):
+                        l.entrar(pessoa(inicio + i))
+                    return l
+                def atributos():
+                    l = linha('L7', 3)
+                    if not hasattr(l, 'fila'):
+                        raise ValueError('O objeto não tem o atributo fila. Cria-o em __init__ com self.fila = [].')
+                    return l.codigo == 'L7' and l.tempo == 3 and list(l.fila) == [] and len(l) == 0
+                def separadas():
+                    a, b = linha('L1', 1), linha('L2', 2)
+                    a.entrar(pessoa(1))
+                    if len(b) != 0 or a.fila is b.fila:
+                        raise ValueError('Um passageiro entrou na linha L1 e apareceu também na L2: as duas linhas partilham a mesma lista. Cria a fila em __init__ com self.fila = [].')
+                    return len(a) == 1
+                def ordem():
+                    l = linha(pessoas=3)
+                    saidas = [l.atender() for _ in range(3)]
+                    if [p and p.get('reserva') for p in saidas] != ['R00001', 'R00002', 'R00003']:
+                        raise ValueError('Entraram três passageiros (R00001, R00002 e R00003) e atender() não os devolveu por essa ordem.')
+                    return len(l) == 0
+                def vazia():
+                    l = linha()
+                    return l.atender() is None and len(l) == 0 and l.atender() is None
+                def espera():
+                    return linha(tempo=3).espera() == 3 and linha(tempo=3, pessoas=2).espera() == 9 and linha(tempo=1, pessoas=5).espera() == 6
+                def escolhe(filas, certa):
+                    linhas = [linha(f'L{i + 1}', tempo, pessoas, 10 * i + 1) for i, (tempo, pessoas) in enumerate(filas)]
+                    r = fn('escolher')(linhas, pessoa(99))
+                    if not any(r is l for l in linhas):
+                        raise ValueError(f'escolher tem de devolver um dos objetos da lista e devolveu {r!r}.')
+                    if r is not linhas[certa]:
+                        descricao = ', '.join(f'{l.codigo}: {pessoas} na fila a {tempo} min' for l, (tempo, pessoas) in zip(linhas, filas))
+                        raise ValueError(f'Com {descricao}, a linha certa é a {linhas[certa].codigo} e escolher devolveu a {getattr(r, "codigo", r)}.')
+                    return True
+                def sem_atrasos(n):
+                    resumo = manha(n)['boarding']['resumo']
+                    paradas = [e['texto'] for e in eventos(n, 'ocorrencia') if e['texto'].startswith('Linha')]
+                    if paradas:
+                        raise ValueError(paradas[0])
+                    if resumo['atrasados']:
+                        raise ValueError(f"{resumo['atrasados']} passageiros perderam o voo por causa da segurança (espera máxima de {resumo['espera_maxima']} minutos). Vê as ocorrências.")
+                    if not all(v['contada'] for v in resumo['voos'].values()):
+                        raise ValueError('A simulação não chegou ao fim: usa simular_embarque() sem argumentos.')
+                    return True
+                d = defn('Linha')
+                check('Linha é uma classe com __init__, entrar, atender, espera e __len__', lambda: isinstance(d, ast.ClassDef) and {'__init__', 'entrar', 'atender', 'espera', '__len__'} <= {n.name for n in d.body if isinstance(n, ast.FunctionDef)})
+                check('O programa usa programar_seguranca e simular_embarque', lambda: chama(None, 'programar_seguranca') and chama(None, 'simular_embarque'))
+                check('Linha("L7", 3) guarda o código e o tempo e começa com a fila vazia', atributos)
+                check('Cada linha tem a sua fila', separadas)
+                check('atender() devolve os passageiros pela ordem em que entraram', ordem)
+                check('atender() numa fila vazia devolve None', vazia)
+                check('espera() é (pessoas na fila + 1) × tempo', espera)
+                check('escolher devolve a linha com a menor espera', lambda: escolhe([(2, 3), (1, 2), (3, 1)], 1))
+                check('A fila mais curta não é a mais rápida: 4 pessoas a 1 min ganham a 2 pessoas a 3 min', lambda: escolhe([(3, 2), (2, 3), (1, 4)], 2))
+                for n in range(3):
+                    check(f'Manhã {n + 1}: ninguém perde o voo por causa da segurança', lambda n=n: sem_atrasos(n))
+            elif lesson == 'boarding_gate':
+                def classes():
+                    base = classe('ErroEmbarque', Exception)
+                    return classe('Porta'), base, classe('VooErrado', base), classe('PortaFechada', base), classe('CartaoRepetido', base)
+                def cartao(i, voo='QX1'):
+                    return {'reserva': f'R{i:05d}', 'nome': f'Passageiro {i}', 'voo': voo, 'lugar': f'{i}A'}
+                def levanta(erro, acao):
+                    try:
+                        acao()
+                    except erro:
+                        return True
+                    except Exception as outro:
+                        raise ValueError(f'Devia levantar {erro.__name__} e levantou {type(outro).__name__}.')
+                    raise ValueError(f'Devia levantar {erro.__name__} e não levantou nenhuma exceção.')
+                def hierarquia():
+                    _, base, *filhas = classes()
+                    if base is Exception or any(f is base for f in filhas) or len(set(filhas)) != 3:
+                        raise ValueError('São precisas quatro classes diferentes: ErroEmbarque e as três filhas.')
+                    return True
+                def valido():
+                    Porta = classes()[0]
+                    p = Porta('G9', 'QX1', 585)
+                    if not isinstance(p.embarcados, set) or p.embarcados:
+                        raise ValueError('embarcados tem de começar como um conjunto vazio: self.embarcados = set().')
+                    p.ler(cartao(1), 560)
+                    p.ler(cartao(2), 584)
+                    return p.embarcados == {'R00001', 'R00002'} and p.codigo == 'G9' and p.voo == 'QX1' and p.fecho == 585
+                def recusa(qual):
+                    Porta, base, VooErrado, PortaFechada, CartaoRepetido = classes()
+                    p = Porta('G9', 'QX1', 585)
+                    p.ler(cartao(1), 560)
+                    if qual == 'voo':
+                        levanta(VooErrado, lambda: p.ler(cartao(2, 'QX2'), 561))
+                    elif qual == 'fecho':
+                        levanta(PortaFechada, lambda: p.ler(cartao(2), 585))
+                        levanta(PortaFechada, lambda: p.ler(cartao(3), 590))
+                    else:
+                        levanta(CartaoRepetido, lambda: p.ler(cartao(1), 562))
+                    if p.embarcados != {'R00001'}:
+                        raise ValueError(f'Um cartão recusado não pode entrar em embarcados (ficou {sorted(p.embarcados)}).')
+                    return True
+                def faltas():
+                    Porta = classes()[0]
+                    p, q = Porta('G9', 'QX1', 585), Porta('G8', 'QX2', 595)
+                    p.ler(cartao(1), 560)
+                    p.ler(cartao(3), 560)
+                    r = p.faltas(['R00001', 'R00002', 'R00003', 'R00004'])
+                    if not isinstance(r, (set, frozenset)):
+                        raise ValueError(f'faltas tem de devolver um conjunto (set) e devolveu {type(r).__name__}.')
+                    if q.embarcados:
+                        raise ValueError('Duas portas partilham o mesmo conjunto de embarcados. Cria-o em __init__ com self.embarcados = set().')
+                    return r == {'R00002', 'R00004'} and p.faltas(['R00001']) == set() and q.faltas(['R00001']) == {'R00001'}
+                def leituras_certas(n):
+                    nomes = {p['reserva']: p['nome'] for p in manha(n)['boarding']['passageiros']}
+                    for e in eventos(n, 'leitura'):
+                        if not e['certo']:
+                            quem = f"{nomes.get(e['reserva'], e['reserva'])} ({e['reserva']})"
+                            if e['aceite']:
+                                raise ValueError(f"Porta {e['porta']}, voo {e['voo']}: o cartão de {quem} foi aceite e devia ser recusado ({', '.join(e['razoes'])}).")
+                            raise ValueError(f"Porta {e['porta']}, voo {e['voo']}: o cartão de {quem} estava em ordem e foi recusado ({e['motivo']}).")
+                    contagens = eventos(n, 'contagem')
+                    if len(contagens) < len(manha(n)['boarding']['portas']):
+                        raise ValueError('A simulação não chegou ao fim: usa simular_embarque() sem argumentos.')
+                    for e in contagens:
+                        if e['atraso']:
+                            raise ValueError(f"A porta {e['porta']} atrasou o voo {e['voo']} {e['atraso']} minutos. Vê as ocorrências.")
+                    return True
+                check('O programa usa raise e as classes Porta e ErroEmbarque', lambda: isinstance(defn('Porta'), ast.ClassDef) and isinstance(defn('ErroEmbarque'), ast.ClassDef) and usa('Porta', ast.Raise))
+                check('O programa usa programar_porta e simular_embarque', lambda: chama(None, 'programar_porta') and chama(None, 'simular_embarque'))
+                check('ErroEmbarque herda de Exception; VooErrado, PortaFechada e CartaoRepetido herdam de ErroEmbarque', hierarquia)
+                check('Cartões em ordem entram em embarcados', valido)
+                check('Cartão de outro voo: VooErrado', lambda: recusa('voo'))
+                check('No minuto do fecho e depois dele: PortaFechada', lambda: recusa('fecho'))
+                check('O mesmo cartão segunda vez: CartaoRepetido', lambda: recusa('repetido'))
+                check('faltas(esperados) devolve o conjunto de quem não embarcou, e cada porta tem o seu', faltas)
+                for n in range(3):
+                    check(f'Manhã {n + 1}: todas as leituras com a decisão certa e nenhum voo atrasado pela porta', lambda n=n: leituras_certas(n))
+            else:
+                import tempfile as _tmp
+                def ficheiro(texto):
+                    pasta = _tmp.mkdtemp(prefix='teste_')
+                    caminho = os.path.join(pasta, 'leituras.csv')
+                    with open(caminho, 'w', encoding='utf-8', newline='') as f:
+                        f.write(texto)
+                    return caminho
+                def le(texto, esperado, rejeitadas):
+                    r = fn('ler_leituras')(ficheiro('voo,reserva,hora,resultado\n' + texto))
+                    if not (isinstance(r, tuple) and len(r) == 2):
+                        raise ValueError('ler_leituras tem de devolver dois valores: return embarcados, rejeitadas.')
+                    dados, n = r
+                    if not isinstance(dados, dict) or not all(isinstance(v, (set, frozenset)) for v in dados.values()):
+                        raise ValueError('O primeiro valor tem de ser um dicionário {voo: conjunto de reservas}.')
+                    if {k: set(v) for k, v in dados.items() if v} != esperado:
+                        raise ValueError(f'Embarcados esperados: {esperado}. Obtidos: {dados}.')
+                    if n != rejeitadas:
+                        raise ValueError(f'Linhas rejeitadas esperadas: {rejeitadas}. Obtidas: {n}.')
+                    return True
+                def sem_ficheiro():
+                    r = fn('ler_leituras')(os.path.join(_tmp.mkdtemp(prefix='teste_'), 'nao_existe.csv'))
+                    return isinstance(r, tuple) and len(r) == 2 and r[0] == {} and r[1] == 0
+                def grava():
+                    caminho = os.path.join(_tmp.mkdtemp(prefix='teste_'), 'faltas.json')
+                    cartoes = [{'reserva': r, 'nome': 'Teste', 'voo': v, 'lugar': '1A', 'porta': 'G21'}
+                               for v, r in (('QX1', 'CCC333'), ('QX1', 'AAA111'), ('QX2', 'DDD444'), ('QX1', 'BBB222'), ('QX3', 'EEE555'))]
+                    esperado = {'QX1': ['BBB222', 'CCC333'], 'QX2': [], 'QX3': ['EEE555']}
+                    devolvido = chamar('guardar_faltas', caminho, cartoes, {'QX1': {'AAA111'}, 'QX2': {'DDD444', 'ZZZ999'}})
+                    if not os.path.exists(caminho):
+                        raise ValueError('guardar_faltas não criou o ficheiro no caminho recebido.')
+                    gravado = json.loads(open(caminho, encoding='utf-8').read())
+                    if gravado != esperado:
+                        raise ValueError(f'Ficheiro esperado: {esperado}. Gravado: {gravado}.')
+                    return devolvido == esperado
+                def percurso(n):
+                    r = manha(n)
+                    reg = r['loading']
+                    if not reg or reg.get('origem') != 'triagem' or r['boarding'].get('origem') != 'checkin':
+                        raise ValueError('O programa tem de correr simular_checkin(), simular_triagem(), simular_embarque() e, só depois, simular_carregamento().')
+                    sem_lista = [e['texto'] for e in reg['eventos'] if e['tipo'] == 'ocorrencia' and 'não recebeu a lista' in e['texto']]
+                    if sem_lista:
+                        raise ValueError(sem_lista[0] + '. Usa entregar_embarcados(embarcados) antes de simular_carregamento().')
+                    dono = {m['etiqueta']: m for m in reg['malas']}
+                    for e in reg['eventos']:
+                        if e['tipo'] == 'descarga':
+                            m = dono[e['mala']]
+                            if e['manual']:
+                                raise ValueError(f"Voo {e['voo']}: a mala {e['mala']} de {m['nome']} (reserva {m['reserva']}) ficou a bordo e o dono não embarcou.")
+                            if not e['certa']:
+                                raise ValueError(f"Voo {e['voo']}: a mala {e['mala']} de {m['nome']} (reserva {m['reserva']}) foi retirada e o dono embarcou.")
+                    for e in reg['eventos']:
+                        if e['tipo'] == 'partida' and e['atraso'] > 0:
+                            raise ValueError(f"O voo {e['voo']} partiu com {e['atraso']} minutos de atraso. Vê as ocorrências.")
+                    if sum(e['tipo'] == 'partida' for e in reg['eventos']) < len(reg['voos']):
+                        raise ValueError('Nem todos os voos chegaram a partir: usa simular_carregamento() sem argumentos.')
+                    return True
+                def ficheiro_de_faltas(n):
+                    r = manha(n)
+                    if r['_faltas'] is None:
+                        raise ValueError('O programa não gravou o ficheiro FICHEIRO_FALTAS.')
+                    gravado = json.loads(r['_faltas'])
+                    certo = {e['voo']: sorted(e['faltas']) for e in eventos(n, 'contagem')}
+                    for voo, faltas in certo.items():
+                        if gravado.get(voo) != faltas:
+                            raise ValueError(f'Voo {voo}: as faltas são {faltas} e o ficheiro tem {gravado.get(voo)}.')
+                    return True
+                check('O programa usa csv e json', lambda: (chama(None, 'reader') or chama(None, 'DictReader')) and (chama(None, 'dump') or chama(None, 'dumps')))
+                check('ler_leituras usa try/except', lambda: usa('ler_leituras', ast.Try))
+                check('O programa usa simular_checkin, simular_triagem, simular_embarque, entregar_embarcados e simular_carregamento', lambda: all(chama(None, f) for f in ('simular_checkin', 'simular_triagem', 'simular_embarque', 'entregar_embarcados', 'simular_carregamento')))
+                check('Linhas certas: um conjunto de reservas por voo', lambda: le('QX1,AAA111,09:20,embarcou\nQX2,DDD444,09:31,embarcou\nQX1,BBB222,09:21,embarcou\n', {'QX1': {'AAA111', 'BBB222'}, 'QX2': {'DDD444'}}, 0) and le('', {}, 0))
+                check('Quem foi recusado não conta como embarcado', lambda: le('QX1,AAA111,09:20,embarcou\nQX1,BBB222,09:46,recusado\nQX1,AAA111,09:20,recusado\nQX2,CCC333,09:50,recusado\n', {'QX1': {'AAA111'}}, 0))
+                check('Linhas com campos a menos ou a mais são rejeitadas e contadas', lambda: le('QX1,AAA111,09:20,embarcou\nQX1,BBB222\nQX1,CCC333,09:22\nQX1,DDD444,09:23,embarcou,extra\nQX1\n', {'QX1': {'AAA111'}}, 4))
+                check('Linhas com a hora estragada são rejeitadas e contadas', lambda: le('QX1,AAA111,ERRO,embarcou\nQX1,BBB222,--:--,embarcou\nQX1,CCC333,09:25,embarcou\nQX1,DDD444,,embarcou\n', {'QX1': {'CCC333'}}, 3))
+                check('Ficheiro que não existe: devolve ({}, 0)', sem_ficheiro)
+                check('guardar_faltas grava {voo: lista ordenada} em JSON e devolve o dicionário', grava)
+                for n in range(3):
+                    check(f'Manhã {n + 1}, do balcão ao porão: só saem as malas de quem não embarcou e os voos partem à hora', lambda n=n: percurso(n))
+                    check(f'Manhã {n + 1}: o ficheiro de faltas tem quem não embarcou em cada voo', lambda n=n: ficheiro_de_faltas(n))
     else:
         raise ValueError('Nível de aprendizagem desconhecido.')
     passed=sum(t['passed'] for t in tests)

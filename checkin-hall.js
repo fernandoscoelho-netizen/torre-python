@@ -5,8 +5,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { geometriaMala, geometriaPessoa } from './baggage-hall-model.js?v=bagagens-3';
-import { criarCaminho } from './sorting-hall-model.js?v=placa-1';
-import { K, CAMINHOS_MALA, D_BALANCA, FILA, COMP_BAIAS, construirCheckin } from './checkin-hall-model.js?v=placa-1';
+import { criarCaminho } from './sorting-hall-model.js?v=embarque-1';
+import { K, CAMINHOS_MALA, D_BALANCA, FILA, COMP_BAIAS, construirCheckin } from './checkin-hall-model.js?v=embarque-1';
 
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];
 const COR_SEM_VOO = '#8a8f96', COR_ILEGIVEL = '#f4f4ee';
@@ -161,6 +161,7 @@ sala.innerHTML = `
   <select id="ck-velocidade" aria-label="Velocidade"><option value="0.25">0,25 min/s</option><option value="0.5">0,5 min/s</option><option value="1" selected>1 min/s</option><option value="2">2 min/s</option><option value="4">4 min/s</option><option value="8">8 min/s</option></select>
   <select id="ck-vista" aria-label="Vista"><option value="geral">Vista geral</option><option value="balcoes">Balcões</option><option value="fila">Fila única</option><option value="coletor">Tapete coletor</option><option value="entrada">Entrada do átrio</option><option value="apoio">Apoio ao cliente</option></select>
   <button id="ck-triagem" title="Seguir as malas na central de triagem" hidden><span class="ck-longo">Triagem </span>➜</button>
+  <button id="ck-embarque" title="Seguir os passageiros até à porta de embarque" hidden><span class="ck-longo">Embarque </span>➜</button>
   <button id="ck-fechar" title="Voltar à maquete do aeroporto"><span class="ck-longo">Aeroporto </span>✕</button>
 </div>`;
 viewport.append(sala);
@@ -442,6 +443,7 @@ function animar(agora) {
     }
     $('ck-play').textContent = aReproduzir ? 'Ⅱ' : '▶';
     $('ck-triagem').hidden = !window.sortingHall?.dados?.();
+    $('ck-embarque').hidden = !(window.boardingHall?.dados?.()?.origem === 'checkin');
     controls.update();
     desenhar();
     renderer.render(scene, camera);
@@ -476,6 +478,7 @@ $('ck-play').onclick = () => { if (!dados) return; if (t >= fimVisual) t = dados
 $('ck-tempo').oninput = e => { t = Number(e.target.value); aReproduzir = false; };
 $('ck-vista').onchange = e => { seguir(null); vista(e.target.value); };
 $('ck-triagem').onclick = () => window.sortingHall?.abrir();
+$('ck-embarque').onclick = () => window.boardingHall?.abrir();
 
 window.addEventListener('checkin-run', e => { abrir(); carregar(e.detail); });
 window.addEventListener('hall-open', e => { if (e.detail !== 'checkin' && sala.classList.contains('aberta')) fechar(); });

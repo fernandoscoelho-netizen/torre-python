@@ -5,7 +5,7 @@
 // escala de um avião real, mas sem reproduzir nenhum aeroporto nem nenhuma companhia em concreto.
 import * as THREE from 'three';
 import { fundir, geometriaPessoa } from './baggage-hall-model.js?v=bagagens-3';
-import { criarCaminho } from './sorting-hall-model.js?v=placa-1';
+import { criarCaminho } from './sorting-hall-model.js?v=embarque-1';
 
 // Avião: s é a distância ao nariz, x é positivo para estibordo (o lado das portas de carga).
 export const A = {
@@ -229,6 +229,36 @@ function geometriasTapete() {
     lanca.push(peca(cx(P.COMP_TAPETE - 2.2, 0.04, 0.04), '#f2c40f', -P.COMP_TAPETE / 2 + 0.45, 0.68, 0.47));
     for (const x of [-2.6, -4.6]) for (const z of [-0.36, 0.36]) lanca.push(peca(cil(0.05, 0.05, 1.0, 8), '#c9ced2', x, -0.62, z, 0, 0, -0.25));
     return { base: fundir(base), lanca: fundir(lanca) };
+}
+
+// Aviões estacionados com a manga encostada, para as cenas que os mostram de fora da placa
+// (a sala de embarque vê-os pelos vidros). Devolve { P21: { xc, aviao, deriva }, ... }.
+export function construirEstacionados(pai) {
+    const M = (cor, rug = 0.8, met = 0, extra = {}) => new THREE.MeshStandardMaterial({ color: cor, roughness: rug, metalness: met, ...extra });
+    const add = (geo, mat, x, y, z, grupo) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; grupo.add(m); return m; };
+    const geo = geometriasAviao(), tex = pintura();
+    const matFuselagem = M('#ffffff', 0.36, 0.08, { map: tex, envMapIntensity: 1.1 }), matPele = M('#ffffff', 0.36, 0.08, { map: tex, envMapIntensity: 1.1, side: THREE.DoubleSide });
+    const matPartes = M('#ffffff', 0.4, 0.25, { vertexColors: true, side: THREE.DoubleSide }), matVeiculos = M('#ffffff', 0.5, 0.15, { vertexColors: true });
+    const lugares = {}, fixos = [];
+    for (const [codigo, xc] of Object.entries(P.LUGARES)) {
+        const aviao = new THREE.Group(); aviao.position.set(xc, 0, P.Z_NARIZ); pai.add(aviao);
+        add(geo.fuselagem, matFuselagem, 0, 0, 0, aviao); add(geo.exterior, matPele, 0, 0, 0, aviao); add(geo.partes, matPartes, 0, 0, 0, aviao);
+        const deriva = M('#16365f', 0.4, 0.1, { side: THREE.DoubleSide }); add(geo.deriva, deriva, 0, 0, 0, aviao);
+        for (const nome of Object.keys(A.PORTAS)) add(geo.portas[nome], matPele, geo.dobradica[0], geo.dobradica[1], 0, aviao);
+        const rx = xc - 16, rz = 3.6, px = xc - 4.15, pz = P.Z_NARIZ + 5.35, dir = Math.atan2(px - rx, pz - rz), comp = Math.hypot(px - rx, pz - rz);
+        fixos.push(peca(cil(0.55, 0.65, 3.5, 14), '#c9ced2', rx, 1.75, rz), peca(cil(2.3, 2.3, 3.0, 24), '#e9eae6', rx, 4.95, rz), peca(cil(2.42, 2.42, 0.25, 24), '#8c949b', rx, 6.5, rz), peca(cil(2.33, 2.33, 0.9, 24), '#27465f', rx, 5.2, rz), peca(cx(2.6, 3.0, 3.8), '#e9eae6', rx, 4.95, 1.4));
+        for (const k of [-1, 1]) for (const dz of [-0.72, 0.72]) fixos.push(peca(cx(0.5, 0.2, 0.25), '#f2c40f', xc + k * 3.8, 0.1, P.Z_NARIZ + A.S_TREM + dz));
+        const manga = new THREE.Group(); manga.position.set(rx, 0, rz); manga.rotation.y = dir; pai.add(manga);
+        const zb = comp - 4.6, tunel = [peca(cx(2.5, 2.9, 12.5), '#e9eae6', 0, 4.95, 7.6), peca(cx(2.56, 0.9, 12), '#27465f', 0, 5.15, 7.6), peca(cx(2.62, 0.14, 12.6), '#8c949b', 0, 6.47, 7.6),
+            peca(cx(2.2, 2.6, comp - 10.5), '#e9eae6', 0, 4.9, 9 + (comp - 10.5) / 2), peca(cx(2.26, 0.8, comp - 11), '#27465f', 0, 5.1, 9 + (comp - 10.5) / 2), peca(cx(2.3, 0.12, comp - 10.4), '#8c949b', 0, 6.26, 9 + (comp - 10.5) / 2),
+            peca(cx(0.22, 3.4, 0.22), '#8c949b', -0.95, 1.9, zb), peca(cx(0.22, 3.4, 0.22), '#8c949b', 0.95, 1.9, zb), peca(cx(3.0, 0.3, 0.5), '#3a4148', 0, 0.55, zb), roda(0.42, 0.32, -1.35, zb), roda(0.42, 0.32, 1.35, zb)];
+        add(fundir(tunel), matVeiculos, 0, 0, 0, manga);
+        const cab = new THREE.Group(); cab.position.set(0, 0, comp); cab.rotation.y = -dir; manga.add(cab);
+        add(fundir([peca(cil(1.75, 1.75, 2.9, 20), '#e9eae6', 0, 4.9, 0), peca(cil(1.84, 1.84, 0.2, 20), '#8c949b', 0, 6.4, 0), peca(cx(1.7, 2.5, 2.3), '#30363c', 1.35, 4.75, 0), peca(cx(0.25, 2.7, 2.5), '#1b1c1e', 2.1, 4.75, 0)]), matVeiculos, 0, 0, 0, cab);
+        lugares[codigo] = { xc, aviao, deriva, manga, dir };
+    }
+    add(fundir(fixos), matVeiculos, 0, 0, 0, pai);
+    return lugares;
 }
 
 // ---------------------------------------------------------------------------

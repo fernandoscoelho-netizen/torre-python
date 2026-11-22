@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { geometriaMala } from './baggage-hall-model.js?v=bagagens-3';
-import { A, P, lugarNoPorao, lugarNoReboque, construirPlaca } from './ramp-hall-model.js?v=placa-1';
+import { A, P, lugarNoPorao, lugarNoReboque, construirPlaca } from './ramp-hall-model.js?v=embarque-1';
 
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];
 const T_CARGA = 0.36, T_DESCARGA = 0.5;             // minutos que uma mala demora do reboque ao porão e do porão ao reboque
@@ -188,6 +188,7 @@ sala.innerHTML = `
   <select id="rp-vista" aria-label="Vista"><option value="geral">Vista geral</option><option value="aviao">Avião</option><option value="frente">Porão dianteiro</option><option value="tras">Porão traseiro</option><option value="corte">Corte dos porões</option><option value="triagem">Saída da triagem</option><option value="recuo">Saída do lugar</option></select>
   <button id="rp-raiox" title="Ver as malas dentro dos porões">Raio X</button>
   <button id="rp-triagem" title="Voltar à central de triagem" hidden>⬅<span class="rp-longo"> Triagem</span></button>
+  <button id="rp-embarque" title="Ver os passageiros na porta de embarque" hidden>⬅<span class="rp-longo"> Embarque</span></button>
   <button id="rp-fechar" title="Voltar à maquete do aeroporto"><span class="rp-longo">Aeroporto </span>✕</button>
 </div>`;
 viewport.append(sala);
@@ -481,6 +482,7 @@ function animar(agora) {
     }
     $('rp-play').textContent = aReproduzir ? 'Ⅱ' : '▶';
     $('rp-triagem').hidden = !(dados?.origem === 'triagem' && window.sortingHall?.dados?.());
+    $('rp-embarque').hidden = !(dados?.origem === 'triagem' && window.boardingHall?.dados?.());
     controls.update();
     desenhar();
     renderer.render(scene, camera);
@@ -508,6 +510,7 @@ $('rp-vista').onchange = e => vista(e.target.value);
 $('rp-voo').onchange = e => { selecionar(e.target.value); };
 $('rp-raiox').onclick = () => verRaioX(!raioX);
 $('rp-triagem').onclick = () => window.sortingHall?.abrir();
+$('rp-embarque').onclick = () => window.boardingHall?.abrir();
 
 window.addEventListener('loading-run', e => { abrir(); carregar(e.detail); });
 window.addEventListener('hall-open', e => { if (e.detail !== 'ramp' && sala.classList.contains('aberta')) fechar(); });

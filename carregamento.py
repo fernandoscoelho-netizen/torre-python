@@ -294,6 +294,24 @@ class Placa:
         self._montar(malas, passageiros)
         self.origem = 'triagem'
 
+    def receber_embarque(self, portas, entregues=None):
+        """Troca as faltas do cenário pelo que aconteceu nas portas de embarque. Só antes de o carregamento começar.
+
+        `portas` é {voo: {embarcados, faltas, atraso}}. Com `entregues` (um dicionário {voo: reservas}), a lista dos
+        embarcados deixa de vir da porta: é a que o programa entregou, e um voo sem lista fica sem reconciliação.
+        """
+        if self.simulado:
+            raise ValueError('O carregamento já começou: a lista do embarque tem de chegar antes.')
+        for voo, dados in portas.items():
+            v = self.voos.get(voo)
+            if v is None:
+                continue
+            v.faltas = set(dados['faltas'])
+            v.embarcados = list(dados['embarcados']) if entregues is None else (list(entregues[voo]) if voo in entregues else None)
+            v.atraso += dados.get('atraso', 0)
+            if dados.get('atraso'):
+                self._ocorrencia(f'Voo {voo}: a porta de embarque atrasou o voo {dados["atraso"]} minutos', voo=voo)
+
     # --- consultas -----------------------------------------------------------
     def _ficha(self, v):
         """Cópia da ficha do avião, sem os campos internos."""
@@ -438,7 +456,10 @@ class Placa:
         a_bordo = [x for p in POROES for x in v.carregadas[p]]
         dados = [{**x.dados(), 'porao': x.porao} for x in a_bordo]
         decisao = []
-        if self._reconciliar is None:
+        if v.embarcados is None:
+            if a_bordo:
+                self._ocorrencia(f'Voo {v.voo}: a placa não recebeu a lista dos passageiros embarcados e ninguém confere as malas', voo=v.voo)
+        elif self._reconciliar is None:
             if a_bordo:
                 self._aviso('reconciliacao', 'Sem programa de reconciliação: ninguém confere as malas com os passageiros que embarcaram')
         else:
@@ -458,7 +479,7 @@ class Placa:
             if x.reserva not in v.faltas:
                 self._ocorrencia(f'Voo {v.voo}: a mala {x.etiqueta} de {self._nomes.get(x.reserva, x.reserva)} vai ser retirada, '
                                  f'mas o passageiro embarcou', voo=v.voo, mala=x.etiqueta)
-        self._evento('embarque', voo=v.voo, embarcados=len(set(v.embarcados)), faltas=sorted(v.faltas), retirar=[x.etiqueta for x in decisao])
+        self._evento('embarque', voo=v.voo, embarcados=len(set(v.embarcados or ())), faltas=sorted(v.faltas), retirar=[x.etiqueta for x in decisao])
         v.fase = 'reconciliacao'
 
     def _tirar(self, v, x, tapete, manual=False):

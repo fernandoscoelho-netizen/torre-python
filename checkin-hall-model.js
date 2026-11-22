@@ -5,7 +5,7 @@
 // à escala de um átrio real, mas sem reproduzir nenhum aeroporto em concreto.
 import * as THREE from 'three';
 import { fundir, geometriaPessoa } from './baggage-hall-model.js?v=bagagens-3';
-import { criarCaminho } from './sorting-hall-model.js?v=placa-1';
+import { criarCaminho } from './sorting-hall-model.js?v=embarque-1';
 
 export const K = {
     X0: -30, X1: 30, Z0: -14, Z1: 26, ALTURA: 9,

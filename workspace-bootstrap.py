@@ -73,7 +73,7 @@ def _preparar_dados(voos_json=None):
 _STDLIB_PROTEGIDOS = {'random', 'math', 'csv', 'json', 'datetime', 'time', 'os', 'sys', 'collections', 'statistics',
                       'zoneinfo', 'string', 're', 'io', 'pathlib', 'typing', 'copy', 'itertools', 'functools', 'ast',
                       'tempfile', 'traceback', 'textwrap', 'enum', 'dataclasses', 'decimal', 'fractions', 'operator',
-                      'bagagens', 'triagem', 'checkin', 'carregamento'}
+                      'bagagens', 'triagem', 'checkin', 'carregamento', 'embarque'}
 _PROJETO = {'dir': None, 'nomes': set()}
 
 
@@ -108,7 +108,7 @@ def _preparar_modulos(files_json):
 
 
 def _modulo_motor(nome):
-    """Motores do Bloco 2 (bagagens.py, triagem.py, checkin.py, carregamento.py): no navegador vêm do Worker; nos testes, da pasta do projeto."""
+    """Motores do Bloco 2 (bagagens.py, triagem.py, checkin.py, carregamento.py, embarque.py): no navegador vêm do Worker; nos testes, da pasta do projeto."""
     modulo = sys.modules.get(nome)
     if modulo is not None:
         return modulo
@@ -162,7 +162,7 @@ def _cenario_triagem(lesson_id):
     nivel, _, variante = str(lesson_id or '').partition('#')
     n = int(variante or 0)
     manha = _MANHAS[n]
-    do_checkin = nivel.startswith(('checkin_', 'loading_'))     # nestes níveis as malas só existem depois de simular o check-in
+    do_checkin = nivel.startswith(('checkin_', 'loading_', 'boarding_'))     # nestes níveis as malas só existem depois de simular o check-in
     partidas = [tri.criar_partida(voo, destino, hora, saida, 0 if do_checkin else 36, semente=n + 1, ilegiveis=0 if do_checkin else ilegiveis)
                 for (voo, destino, hora, ilegiveis), saida in zip(_PARTIDAS, manha['saidas'])]
     central = tri.CentralTriagem(partidas, semente=n + 1, sem_voo=0 if do_checkin else 3, programar=nivel != 'sorting_tags', rotas=nivel != 'sorting_routes')
@@ -200,6 +200,28 @@ def _cenario_carregamento(lesson_id, central):
     n = int(variante or 0)
     return car.Placa(central.consultar_partidas(), semente=n + 1, modo=_MODO_CARGA.get(nivel, 'folgado'),
                      faltas=0 if nivel in _MODO_CARGA else 3, plano=nivel not in _MODO_CARGA, reconciliacao=nivel != 'loading_reconcile')
+
+
+# Cenários do embarque: os mesmos voos; em cada manhã há uma linha de controlo fechada e passageiros diferentes.
+_LINHA_FECHADA = ['L3', 'L4', 'L3']
+_DADOS = {'dir': None}
+
+
+def _pasta_dados():
+    """Pasta dos ficheiros de dados: /dados no navegador; uma pasta temporária nos testes."""
+    if _DADOS['dir'] is None:
+        import os, tempfile
+        _DADOS['dir'] = _DADOS_DIR if sys.platform == 'emscripten' else tempfile.mkdtemp(prefix='dados_')
+        os.makedirs(_DADOS['dir'], exist_ok=True)
+    return _DADOS['dir']
+
+
+def _cenario_embarque(lesson_id, central):
+    emb = _modulo_motor('embarque')
+    nivel, _, variante = str(lesson_id or '').partition('#')
+    n = int(variante or 0)
+    return emb.Embarque(central.consultar_partidas(), semente=n + 1, fechada=_LINHA_FECHADA[n],
+                        seguranca=nivel != 'boarding_security', porta=nivel != 'boarding_gate')
 
 
 def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', files_json='{}'):
@@ -356,7 +378,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
         def transferir_voo(voo, tapete):
             _sala.transferir_voo(voo, tapete)
         def ocorrencias():
-            return [dict(o) for o in sorted(_sala.ocorrencias + _balcoes.ocorrencias + _central.ocorrencias + _placa.ocorrencias, key=lambda o: o['minuto'])]
+            return [dict(o) for o in sorted(_sala.ocorrencias + _balcoes.ocorrencias + _central.ocorrencias + _portas.ocorrencias + _placa.ocorrencias, key=lambda o: o['minuto'])]
         def contar_malas(voo, estado=None):
             if estado is not None and estado not in _bag.ESTADOS_MALA:
                 raise ValueError('Estado desconhecido. Usa um destes: ' + ', '.join(_bag.ESTADOS_MALA) + '.')
@@ -414,6 +436,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             _placa.programar_reconciliacao(funcao)
         def simular_carregamento(ate=None):
             fim = None if ate is None else _minutes(ate)
+            _ligado = _placa.origem == 'triagem'
             if _balcoes.simulado and _central.origem == 'checkin' and _central.concluida and not _placa.simulado and _placa.origem != 'triagem':
                 saida_do_voo = {p['voo']: p['saida'] for p in _central.consultar_partidas()}
                 voo_da_mala = {m['codigo']: m['voo'] for m in _balcoes.malas}
@@ -422,8 +445,51 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
                 _placa.receber_malas([{'etiqueta': m['codigo'], 'voo': m['voo'], 'peso': m['peso'], 'reserva': m['reserva'], 'pronta': chegada.get(m['codigo'])}
                                       for m in _balcoes.malas if m['voo'] in saida_do_voo],
                                      [{'reserva': p.reserva, 'nome': p.nome, 'voo': p.voo, 'malas': len(p.malas)} for p in _balcoes.passageiros if p.estado == 'aceite'])
+            if not _ligado and _placa.origem == 'triagem' and _portas.origem == 'checkin' and _portas.concluida:
+                # a porta de embarque diz à placa quem embarcou; no nível dos ficheiros, a lista é a que o programa entregar
+                _placa.receber_embarque(_portas.para_a_placa(), None if _nivel != 'boarding_files' else _entregues)
             _placa.correr(ate=fim)
             return _placa.resumo()
+        import os as _os
+        _nivel = str(lesson_id or '').partition('#')[0]
+        _portas = _cenario_embarque(lesson_id, _central)
+        _entregues = {}
+        FICHEIRO_LEITURAS = _pasta_dados() + '/leituras.csv'
+        FICHEIRO_FALTAS = _pasta_dados() + '/faltas.json'
+        for _antigo in (FICHEIRO_LEITURAS, FICHEIRO_FALTAS):
+            if _os.path.exists(_antigo):
+                _os.remove(_antigo)
+        def consultar_linhas():
+            return _portas.consultar_linhas()
+        def consultar_portas():
+            return _portas.consultar_portas()
+        def consultar_cartoes(voo=None):
+            if _balcoes.simulado and not _portas.simulado and _portas.origem != 'checkin':
+                _portas.receber_passageiros([{'reserva': p.reserva, 'nome': p.nome, 'voo': p.voo, 'chegada': p.fim + 3, 'malas': len(p.malas)}
+                                             for p in _balcoes.passageiros if p.estado == 'aceite'])
+            return _portas.consultar_cartoes(voo)
+        def programar_seguranca(classe, escolher):
+            _portas.programar_seguranca(classe, escolher)
+        def programar_porta(classe, erro):
+            _portas.programar_porta(classe, erro)
+        def simular_embarque(ate=None):
+            fim = None if ate is None else _minutes(ate)
+            if _balcoes.simulado and not _portas.simulado and _portas.origem != 'checkin':
+                _portas.receber_passageiros([{'reserva': p.reserva, 'nome': p.nome, 'voo': p.voo, 'chegada': p.fim + 3, 'malas': len(p.malas)}
+                                             for p in _balcoes.passageiros if p.estado == 'aceite'])
+            _portas.correr(ate=fim)
+            with open(FICHEIRO_LEITURAS, 'w', encoding='utf-8', newline='') as f:
+                f.write(_portas.texto_leituras())
+            return _portas.resumo()
+        def entregar_embarcados(embarcados):
+            if not isinstance(embarcados, dict):
+                raise TypeError('entregar_embarcados recebe um dicionário {voo: conjunto de reservas}.')
+            if _placa.simulado:
+                raise ValueError('O carregamento já começou: entrega os embarcados antes de simular_carregamento().')
+            for voo, reservas in embarcados.items():
+                if isinstance(reservas, (str, dict)) or not hasattr(reservas, '__iter__'):
+                    raise TypeError(f'Em entregar_embarcados, o voo {voo} devia ter um conjunto de reservas e tem {reservas!r}.')
+                _entregues[voo] = list(reservas)
         def _entrada(mensagem=''):
             print(mensagem, end='')
             try:
@@ -439,6 +505,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
         api.update(consultar_partidas=consultar_partidas, consultar_rede=consultar_rede, programar_leitor=programar_leitor, definir_rota=definir_rota, consultar_rotas=consultar_rotas, estado_troco=estado_troco, simular_triagem=simular_triagem)
         api.update(consultar_avioes=consultar_avioes, consultar_malas=consultar_malas, programar_plano=programar_plano, programar_reconciliacao=programar_reconciliacao, simular_carregamento=simular_carregamento)
         api.update(consultar_passageiros=consultar_passageiros, consultar_balcoes=consultar_balcoes, programar_validacao=programar_validacao, programar_fila=programar_fila, programar_etiquetas=programar_etiquetas, simular_checkin=simular_checkin)
+        api.update(consultar_linhas=consultar_linhas, consultar_portas=consultar_portas, consultar_cartoes=consultar_cartoes, programar_seguranca=programar_seguranca, programar_porta=programar_porta, simular_embarque=simular_embarque, entregar_embarcados=entregar_embarcados, FICHEIRO_LEITURAS=FICHEIRO_LEITURAS, FICHEIRO_FALTAS=FICHEIRO_FALTAS)
         if mode in ('run', 'assess'):
             _preparar_dados()
             _preparar_modulos(files_json)
@@ -454,7 +521,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             variables.append({'name': name, 'type': type(value).__name__, 'value': representation[:180]})
             if len(variables) >= 30:
                 break
-        return json.dumps({'ok': True, 'mode': mode, 'actions': actions, 'variables': variables, 'grade': _grade_solution(source, namespace, lesson_id) if mode == 'assess' else None, 'baggage': _sala.registo(), 'sorting': _central.registo(), 'checkin': _balcoes.registo(), 'loading': _placa.registo()}, ensure_ascii=False)
+        return json.dumps({'ok': True, 'mode': mode, 'actions': actions, 'variables': variables, 'grade': _grade_solution(source, namespace, lesson_id) if mode == 'assess' else None, 'baggage': _sala.registo(), 'sorting': _central.registo(), 'checkin': _balcoes.registo(), 'loading': _placa.registo(), 'boarding': _portas.registo()}, ensure_ascii=False)
     except BaseException as error:
         line = getattr(error, 'lineno', None)
         modulo = None

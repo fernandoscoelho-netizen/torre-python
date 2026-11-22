@@ -73,7 +73,7 @@ def _preparar_dados(voos_json=None):
 _STDLIB_PROTEGIDOS = {'random', 'math', 'csv', 'json', 'datetime', 'time', 'os', 'sys', 'collections', 'statistics',
                       'zoneinfo', 'string', 're', 'io', 'pathlib', 'typing', 'copy', 'itertools', 'functools', 'ast',
                       'tempfile', 'traceback', 'textwrap', 'enum', 'dataclasses', 'decimal', 'fractions', 'operator',
-                      'bagagens'}
+                      'bagagens', 'triagem'}
 _PROJETO = {'dir': None, 'nomes': set()}
 
 
@@ -107,20 +107,24 @@ def _preparar_modulos(files_json):
     importlib.invalidate_caches()
 
 
-def _modulo_bagagens():
-    """Motor das bagagens (bagagens.py): no navegador vem do Worker; nos testes, da pasta do projeto."""
-    modulo = sys.modules.get('bagagens')
+def _modulo_motor(nome):
+    """Motores do Bloco 2 (bagagens.py, triagem.py): no navegador vêm do Worker; nos testes, da pasta do projeto."""
+    modulo = sys.modules.get(nome)
     if modulo is not None:
         return modulo
-    fonte = globals().get('_bagagens_source')
+    fonte = globals().get(f'_{nome}_source')
     if fonte is None:
-        import bagagens as modulo
-        return modulo
+        import importlib
+        return importlib.import_module(nome)
     import types
-    modulo = types.ModuleType('bagagens')
-    exec(compile(fonte, 'bagagens.py', 'exec'), modulo.__dict__)
-    sys.modules['bagagens'] = modulo
+    modulo = types.ModuleType(nome)
+    exec(compile(fonte, nome + '.py', 'exec'), modulo.__dict__)
+    sys.modules[nome] = modulo
     return modulo
+
+
+def _modulo_bagagens():
+    return _modulo_motor('bagagens')
 
 
 # Cenários das bagagens: o nível escolhe a sala inicial; '#n' é uma variante usada só na avaliação.
@@ -144,6 +148,30 @@ def _cenario_bagagens(lesson_id):
     sala.iniciar_motor('T03')
     sala.agendar_avaria('T03', cenario['avaria'])
     return sala
+
+
+# Cenários da triagem: em cada manhã os voos saem por saídas diferentes; '#n' é uma variante usada só na avaliação.
+_PARTIDAS = [('PY101', 'Lisboa', 600, 2), ('PY102', 'Madrid', 610, 0), ('PY103', 'Paris', 620, 1), ('PY104', 'Londres', 630, 0)]
+_MANHAS = [dict(saidas=['S01', 'S02', 'S03', 'S04'], fora=None, avarias=[('A2', 'A3', 486)]),
+           dict(saidas=['S03', 'S01', 'S04', 'S02'], fora=('A2', 'A3'), avarias=[('A1', 'A2', 484)]),
+           dict(saidas=['S02', 'S04', 'S01', 'S03'], fora=('A3', 'B3'), avarias=[('A3', 'A4', 485), ('A2', 'B2', 491, 6)])]
+
+
+def _cenario_triagem(lesson_id):
+    tri = _modulo_motor('triagem')
+    nivel, _, variante = str(lesson_id or '').partition('#')
+    n = int(variante or 0)
+    manha = _MANHAS[n]
+    partidas = [tri.criar_partida(voo, destino, hora, saida, 36, semente=n + 1, ilegiveis=ilegiveis)
+                for (voo, destino, hora, ilegiveis), saida in zip(_PARTIDAS, manha['saidas'])]
+    central = tri.CentralTriagem(partidas, semente=n + 1, sem_voo=3, programar=nivel != 'sorting_tags', rotas=nivel != 'sorting_routes')
+    if nivel == 'sorting_routes' and manha['fora']:
+        central.agendar_avaria(*manha['fora'], central.inicio, duracao=600)     # troço fora de serviço toda a manhã
+        central._inicio_do_minuto()
+    if nivel == 'sorting_fault':
+        for avaria in manha['avarias']:
+            central.agendar_avaria(*avaria)
+    return central
 
 
 def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', files_json='{}'):
@@ -300,7 +328,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
         def transferir_voo(voo, tapete):
             _sala.transferir_voo(voo, tapete)
         def ocorrencias():
-            return [dict(o) for o in _sala.ocorrencias]
+            return [dict(o) for o in sorted(_sala.ocorrencias + _central.ocorrencias, key=lambda o: o['minuto'])]
         def contar_malas(voo, estado=None):
             if estado is not None and estado not in _bag.ESTADOS_MALA:
                 raise ValueError('Estado desconhecido. Usa um destes: ' + ', '.join(_bag.ESTADOS_MALA) + '.')
@@ -311,6 +339,25 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             fim = None if ate is None else _minutes(ate)
             _sala.correr(None if controlador is None else (lambda sala, minuto: controlador(minuto)), ate=fim)
             return _sala.resumo()
+        _central = _cenario_triagem(lesson_id)
+        def consultar_partidas():
+            return _central.consultar_partidas()
+        def consultar_rede():
+            return _central.rede()
+        def programar_leitor(funcao):
+            _central.programar_leitor(funcao)
+        def definir_rota(saida, rota):
+            _central.definir_rota(saida, rota)
+        def consultar_rotas():
+            return _central.consultar_rotas()
+        def estado_troco(origem, destino):
+            return _central.estado_troco(origem, destino)
+        def simular_triagem(controlador=None, ate=None):
+            if controlador is not None and not callable(controlador):
+                raise TypeError('simular_triagem recebe uma função, por exemplo simular_triagem(reagir).')
+            fim = None if ate is None else _minutes(ate)
+            _central.correr(None if controlador is None else (lambda central, minuto: controlador(minuto)), ate=fim)
+            return _central.resumo()
         def _entrada(mensagem=''):
             print(mensagem, end='')
             try:
@@ -323,6 +370,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
         api = dict(consultar_parqueamentos=consultar_parqueamentos, lugares_livres=lugares_livres, parqueamento_livre=parqueamento_livre, estado_voo=estado_voo, aterrar=aterrar, parquear=parquear)
         api.update(consultar_voos=consultar_voos, voos_para=voos_para, contar_voos=contar_voos, hora_atual=hora_atual, pista_livre=pista_livre, reservar_pista=reservar_pista, autorizar=autorizar, ao_minuto=ao_minuto, input=_entrada, voos=consultar_voos(), MAX_VOOS=100, HORA_INICIAL=360)
         api.update(consultar_tapetes=consultar_tapetes, atribuir_tapete=atribuir_tapete, iniciar_motor=iniciar_motor, parar_motor=parar_motor, libertar_tapete=libertar_tapete, contar_malas=contar_malas, simular_bagagens=simular_bagagens, estado_tapete=estado_tapete, transferir_voo=transferir_voo, ocorrencias=ocorrencias)
+        api.update(consultar_partidas=consultar_partidas, consultar_rede=consultar_rede, programar_leitor=programar_leitor, definir_rota=definir_rota, consultar_rotas=consultar_rotas, estado_troco=estado_troco, simular_triagem=simular_triagem)
         if mode in ('run', 'assess'):
             _preparar_dados()
             _preparar_modulos(files_json)
@@ -338,7 +386,7 @@ def _workspace_handle(source, snapshot_json, mode, lesson_id=None, stdin='', fil
             variables.append({'name': name, 'type': type(value).__name__, 'value': representation[:180]})
             if len(variables) >= 30:
                 break
-        return json.dumps({'ok': True, 'mode': mode, 'actions': actions, 'variables': variables, 'grade': _grade_solution(source, namespace, lesson_id) if mode == 'assess' else None, 'baggage': _sala.registo()}, ensure_ascii=False)
+        return json.dumps({'ok': True, 'mode': mode, 'actions': actions, 'variables': variables, 'grade': _grade_solution(source, namespace, lesson_id) if mode == 'assess' else None, 'baggage': _sala.registo(), 'sorting': _central.registo()}, ensure_ascii=False)
     except BaseException as error:
         line = getattr(error, 'lineno', None)
         modulo = None

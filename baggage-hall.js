@@ -568,6 +568,7 @@ export function seguir(codigo) {
 
 export function abrir() {
     if (!renderer) construir();
+    window.dispatchEvent(new CustomEvent('hall-open', { detail: 'baggage' }));
     sala.classList.add('aberta'); botaoAbrir.hidden = true;
     ajustar();
     if (ciclo === null) { ultimo = 0; ciclo = requestAnimationFrame(animar); }
@@ -586,4 +587,5 @@ $('bh-tempo').oninput = e => { t = Number(e.target.value); aReproduzir = false; 
 $('bh-vista').onchange = e => { seguir(null); vista(e.target.value); };
 
 window.addEventListener('baggage-run', e => { abrir(); carregar(e.detail); });
+window.addEventListener('hall-open', e => { if (e.detail !== 'baggage' && sala.classList.contains('aberta')) fechar(); });
 window.baggageHall = { abrir, fechar, seguir, vista, info: () => renderer && { ...renderer.info.render, geometrias: renderer.info.memory.geometries, texturas: renderer.info.memory.textures }, lotes: () => lotes.map(l => ({ voo: l.voo, A: l.A, B: l.B, n: l.n, fim: l.fim, fase: l.fase, tapeteB: l.tapeteB, tapeteFim: l.tapeteFim, curto: l.curto })) };

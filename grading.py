@@ -1,6 +1,6 @@
 import copy, math, tempfile, pathlib
 
-_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim', 'baggage_fault'}
+_NOVOS_NIVEIS = {'panel', 'priority', 'holding', 'sets', 'metar', 'fees', 'stdlib', 'data', 'objects', 'tower', 'baggage_claim', 'baggage_fault', 'sorting_tags', 'sorting_routes', 'sorting_fault'}
 
 def _grade_solution(source, ns, lesson):
     tests = []
@@ -291,6 +291,93 @@ def _grade_solution(source, ns, lesson):
                 ocup = ', '.join(cenario['ocupados']) or 'nenhum'
                 check(f'Avaria às {hora} (outros tapetes ocupados: {ocup}): 120 malas entregues', entregues)
                 check(f'Avaria às {hora}: PY001 mudado de tapete até 2 minutos depois', rapido)
+        elif lesson in ('sorting_tags', 'sorting_routes', 'sorting_fault'):
+            import contextlib, io
+            def manha(n, cache={}):
+                # Volta a correr o programa do aluno numa central diferente (voos noutras saídas, outros troços parados)
+                if n not in cache:
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                        cache[n] = json.loads(_workspace_handle(source, '{"stands":[]}', 'triagem', f'{lesson}#{n}'))
+                r = cache[n]
+                if not r['ok']:
+                    raise RuntimeError(r['error']['type'] + ': ' + r['error']['message'])
+                if not r['sorting']:
+                    raise ValueError('O programa não chegou a simular a triagem.')
+                return r['sorting']
+            def bem_triadas(n):
+                reg = manha(n)
+                saida_do_voo = {p['voo']: p['saida'] for p in reg['partidas']}
+                fim = {e['mala']: e for e in reg['eventos'] if e['tipo'] == 'mala' and e['estado'] != 'em_tapete'}
+                for mala in reg['malas']:
+                    esperado = saida_do_voo.get(mala['voo']) if mala['legivel'] else None
+                    e = fim.get(mala['codigo'])
+                    if e is None:
+                        raise ValueError(f"A mala {mala['codigo']} não chegou a nenhuma saída.")
+                    if esperado and (e['estado'] != 'triada' or e['saida'] != esperado):
+                        onde = 'inspeção' if e['estado'] == 'inspecao' else e['saida']
+                        raise ValueError(f"A mala {mala['codigo']} do voo {mala['voo']} devia sair em {esperado} e acabou em {onde}.")
+                    if not esperado and e['estado'] != 'inspecao':
+                        raise ValueError(f"A mala {mala['codigo']} não tem voo conhecido ou etiqueta legível e acabou em {e['saida']}.")
+                return True
+            if lesson == 'sorting_tags':
+                tabela = [dict(voo='PX1', destino='Faro', hora=600, saida='S02', malas=10), dict(voo='PX2', destino='Roma', hora=615, saida='S04', malas=20), dict(voo='PX3', destino='Oslo', hora=620, saida='S02', malas=5)]
+                check('criar_destinos usa um ciclo for', lambda: usa('criar_destinos', ast.For))
+                check('criar_destinos devolve {voo: saida}', lambda: chamar('criar_destinos', tabela) == {'PX1': 'S02', 'PX2': 'S04', 'PX3': 'S02'})
+                check('Lista vazia devolve um dicionário vazio', lambda: chamar('criar_destinos', []) == {})
+                check('encaminhar usa if', lambda: usa('encaminhar', ast.If))
+                check('O programa usa programar_leitor', lambda: chama(None, 'programar_leitor'))
+                for n in range(3):
+                    saidas = ', '.join(_MANHAS[n]['saidas'])
+                    check(f'Manhã {n + 1} (voos em {saidas}): cada mala na saída certa e só as ilegíveis ou sem voo em inspeção', lambda n=n: bem_triadas(n))
+            else:
+                def curta(rede, origem, destino):
+                    visto, fila = {origem: 0}, [origem]
+                    for no in fila:
+                        for v in rede.get(no, []):
+                            if v not in visto:
+                                visto[v] = visto[no] + 1
+                                fila.append(v)
+                    return visto.get(destino)
+                def rota_minima(rede, origem, destino):
+                    rota = chamar('encontrar_rota', rede, origem, destino)
+                    if not isinstance(rota, (list, tuple)) or not rota or rota[0] != origem or rota[-1] != destino:
+                        return False
+                    return all(b in rede[a] for a, b in zip(rota, rota[1:])) and len(rota) - 1 == curta(rede, origem, destino)
+                escada = {'E': ['A', 'X'], 'A': ['B', 'C'], 'B': ['D'], 'C': ['D', 'F'], 'D': ['S', 'E'], 'F': ['S'], 'X': [], 'S': []}
+                anel = {'A': ['B'], 'B': ['C', 'A'], 'C': ['A', 'D'], 'D': ['B'], 'Z': ['A']}
+                atalho = {'P': ['Q', 'L1'], 'Q': ['T'], 'L1': ['L2'], 'L2': ['T'], 'T': ['P']}
+                desvio = {'P': ['L1', 'Q'], 'Q': ['T'], 'L1': ['L2'], 'L2': ['T'], 'T': ['P']}
+                if lesson == 'sorting_routes':
+                    check('encontrar_rota usa um ciclo while', lambda: usa('encontrar_rota', ast.While))
+                    check('Dois nós ligados diretamente', lambda: list(chamar('encontrar_rota', escada, 'E', 'A')) == ['E', 'A'])
+                    check('Caminho com menos troços entre vários possíveis', lambda: rota_minima(escada, 'E', 'S') and rota_minima(escada, 'A', 'F') and rota_minima(atalho, 'P', 'T') and rota_minima(desvio, 'P', 'T'))
+                    check('Rede com ciclos: não visita o mesmo nó duas vezes', lambda: rota_minima(anel, 'A', 'D') and rota_minima(anel, 'D', 'C'))
+                    check('Origem igual ao destino devolve [origem]', lambda: list(chamar('encontrar_rota', escada, 'B', 'B')) == ['B'])
+                    check('Sem caminho devolve None', lambda: chamar('encontrar_rota', escada, 'S', 'E') is None and chamar('encontrar_rota', anel, 'A', 'Z') is None)
+                    check('O programa usa definir_rota', lambda: chama(None, 'definir_rota'))
+                    for n in range(3):
+                        fora = _MANHAS[n]['fora']
+                        texto = 'todos os troços a funcionar' if not n or not fora else f'troço de {fora[0]} para {fora[1]} fora de serviço'
+                        check(f'Manhã {n + 1} ({texto}): cada mala na saída do seu voo', lambda n=n: bem_triadas(n))
+                else:
+                    check('reagir usa um ciclo for', lambda: usa('reagir', ast.For))
+                    check('O programa passa reagir a simular_triagem', lambda: chama(None, 'simular_triagem') and defn('reagir') is not None)
+                    def rotas_corrigidas(n):
+                        reg = manha(n)
+                        for avaria in [e for e in reg['eventos'] if e['tipo'] == 'troco' and e['estado'] == 'avariado']:
+                            rotas = dict(reg['rotas_iniciais'])
+                            for e in reg['eventos']:
+                                if e['tipo'] == 'rota' and e['minuto'] <= avaria['minuto'] + 1:
+                                    rotas[e['saida']] = e['rota']
+                            for saida, rota in rotas.items():
+                                if avaria['troco'] in [a + '>' + b for a, b in zip(rota, rota[1:])]:
+                                    de, para = avaria['troco'].split('>')
+                                    raise ValueError(f"Um minuto depois da avaria no troço de {de} para {para}, a rota para {saida} ainda passa por lá.")
+                        return True
+                    for n in range(3):
+                        texto = ' e '.join(f'{a[0]}–{a[1]} às {a[2] // 60:02d}:{a[2] % 60:02d}' for a in _MANHAS[n]['avarias'])
+                        check(f'Manhã {n + 1} (avaria {texto}): cada mala na saída do seu voo', lambda n=n: bem_triadas(n))
+                        check(f'Manhã {n + 1}: rotas fora do troço avariado até 1 minuto depois', lambda n=n: rotas_corrigidas(n))
     else:
         raise ValueError('Nível de aprendizagem desconhecido.')
     passed=sum(t['passed'] for t in tests)

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { melhorarCamara } from './camara-salas.js?v=camara-1';
 import { carregarElenco, vestir } from './pessoas-glb.js?v=pessoas-1';
+import { aplicarAcabamentos } from './acabamentos.js?v=acabamentos-1';
 import { geometriaMala, geometriaPessoa } from './baggage-hall-model.js?v=pessoas-1';
 import { criarCaminho } from './sorting-hall-model.js?v=relatorio-1';
 import { K, CAMINHOS_MALA, D_BALANCA, FILA, COMP_BAIAS, construirCheckin } from './checkin-hall-model.js?v=pessoas-1';
@@ -197,6 +198,7 @@ function construir() {
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.minDistance = 1.5; controls.maxDistance = 150;
     modelo = construirCheckin(scene, renderer);
     melhorarCamara({ controls, camera, scene, sala, barra: sala.querySelector('.ck-controlos'), antesDe: sala.querySelector('#ck-fechar') });
+    aplicarAcabamentos(scene, { excluir: [modelo.matPessoas, modelo.matMalas] });          // textura e relevo fino no mobiliário
     carregarElenco().then(e => { elenco = e; vestir(e, scene, modelo.matPessoas); });     // pessoas .glb, se existirem (opcional)
     marcador = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 8, 36), new THREE.MeshBasicMaterial({ color: '#ffd400', depthTest: false, transparent: true }));
     marcador.rotation.x = Math.PI / 2; marcador.renderOrder = 5; marcador.visible = false; scene.add(marcador);
@@ -222,7 +224,7 @@ function ajustar() {
 }
 
 const VISTAS = {
-    geral: [[0, 32, 45], [0, 0, 3.5]], balcoes: [[0, 7.5, 6], [0, 1.6, -6.5]], fila: [[-19, 12, 17], [0, 0.6, 3.5]],
+    geral: [[17, 17, 33], [-2, 0.5, -1]], balcoes: [[0, 7.5, 6], [0, 1.6, -6.5]], fila: [[-19, 12, 17], [0, 0.6, 3.5]],
     coletor: [[-22, 6.5, -3.4], [-9, 0.6, -10.4]], entrada: [[19, 6, 9], [3, 1.4, 21]], apoio: [[-11, 6.5, 5.5], [-25, 0.8, -5]],
 };
 export function vista(nome) {

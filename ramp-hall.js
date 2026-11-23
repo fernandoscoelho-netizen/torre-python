@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { melhorarCamara } from './camara-salas.js?v=camara-1';
 import { carregarElenco, vestir } from './pessoas-glb.js?v=pessoas-1';
+import { aplicarAcabamentos } from './acabamentos.js?v=acabamentos-1';
 import { geometriaMala } from './baggage-hall-model.js?v=pessoas-1';
 import { A, P, lugarNoPorao, lugarNoReboque, construirPlaca } from './ramp-hall-model.js?v=pessoas-1';
 
@@ -226,6 +227,7 @@ function construir() {
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.015; controls.minDistance = 2; controls.maxDistance = 420;
     modelo = construirPlaca(scene, renderer);
     melhorarCamara({ controls, camera, scene, sala, barra: sala.querySelector('.rp-controlos'), antesDe: sala.querySelector('#rp-fechar') });
+    aplicarAcabamentos(scene, { excluir: [modelo.matPessoas, modelo.matMalas] });          // textura e relevo fino no mobiliário
     carregarElenco().then(e => { elenco = e; vestir(e, scene, modelo.matPessoas); });     // pessoas .glb, se existirem (opcional)
     marcador = new THREE.Mesh(new THREE.ConeGeometry(1.1, 2.4, 4), new THREE.MeshBasicMaterial({ color: '#ffd400', toneMapped: false }));
     marcador.rotation.x = Math.PI; marcador.visible = false; scene.add(marcador);

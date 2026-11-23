@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { melhorarCamara } from './camara-salas.js?v=camara-1';
 import { carregarElenco, vestir } from './pessoas-glb.js?v=pessoas-1';
+import { aplicarAcabamentos } from './acabamentos.js?v=acabamentos-1';
 import { criarCaminho } from './sorting-hall-model.js?v=relatorio-1';
 import { K, FILAS, FILAS_PORTA, CADEIRAS, lugarEmTerra, lugarNaLoja, geometriaPassageiro, geometriaTabuleiro, construirEmbarque } from './boarding-hall-model.js?v=pessoas-1';
 
@@ -283,6 +284,7 @@ function construir() {
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.minDistance = 1.5; controls.maxDistance = 330;
     modelo = construirEmbarque(scene, renderer);
     melhorarCamara({ controls, camera, scene, sala, barra: sala.querySelector('.bd-controlos'), antesDe: sala.querySelector('#bd-fechar') });
+    aplicarAcabamentos(scene, { excluir: [modelo.matPessoas, modelo.matMalas] });          // textura e relevo fino no mobiliário
     carregarElenco().then(e => { elenco = e; vestir(e, scene, modelo.matPessoas); });     // pessoas .glb, se existirem (opcional)
     for (const codigo of Object.keys(K.LINHAS)) { const m = new THREE.Mesh(geometriaTabuleiro(Object.keys(tabuleiros).length + 1), modelo.matTabuleiro); m.castShadow = true; m.visible = false; scene.add(m); tabuleiros[codigo] = m; }
     marcador = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 8, 36), new THREE.MeshBasicMaterial({ color: '#ffd400', depthTest: false, transparent: true }));
@@ -309,7 +311,7 @@ function ajustar() {
 }
 
 const VISTAS = {
-    geral: [[-15, 118, 112], [-15, 0, 2]], seguranca: [[-109, 27, 13], [-106, 0, -10.5]], raiox: [[-106.6, 2.7, -9.7], [-101, 1.1, -12.8]], corredor: [[-84, 3.4, -14.2], [-30, 1.5, -8]],
+    geral: [[-15, 118, 112], [-15, 0, 2]], seguranca: [[-93, 11, 0.5], [-106, 0.4, -11]], raiox: [[-106.6, 2.7, -9.7], [-101, 1.1, -12.8]], corredor: [[-84, 3.4, -14.2], [-30, 1.5, -8]],
 };
 const vistaDaPorta = g => { const x = K.PORTAS[g]; return [[x - 3, 6.6, -14.6], [x + 7.5, 1, -3]]; };
 export function vista(nome) {

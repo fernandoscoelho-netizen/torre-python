@@ -70,7 +70,19 @@ export function fundir(pecas) {
     }
     const f = new THREE.BufferGeometry();
     f.setAttribute('position', new THREE.BufferAttribute(pos, 3)); f.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); f.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    f.setAttribute('uv', new THREE.BufferAttribute(uvCaixa(pos, nor), 2)); f.userData.uvMundo = true;      // para as texturas de acabamento (acabamentos.js)
     return f;
+}
+// Coordenadas de textura projetadas pela normal (mapeamento em caixa), 1 unidade = 1 metro.
+export function uvCaixa(pos, nor) {
+    const n = pos.length / 3, uv = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) {
+        const ax = Math.abs(nor[i * 3]), ay = Math.abs(nor[i * 3 + 1]), az = Math.abs(nor[i * 3 + 2]);
+        if (ax >= ay && ax >= az) { uv[i * 2] = pos[i * 3 + 2]; uv[i * 2 + 1] = pos[i * 3 + 1]; }
+        else if (ay >= az) { uv[i * 2] = pos[i * 3]; uv[i * 2 + 1] = pos[i * 3 + 2]; }
+        else { uv[i * 2] = pos[i * 3]; uv[i * 2 + 1] = pos[i * 3 + 1]; }
+    }
+    return uv;
 }
 const peca = (geo, cor, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => { if (rx || ry || rz) geo.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz))); geo.translate(x, y, z); return [geo, cor]; };
 const cx = (w, h, d) => new THREE.BoxGeometry(w, h, d);

@@ -5,7 +5,7 @@
 // Os nós e os troços têm os mesmos códigos do grafo que o aluno recebe em consultar_rede().
 // 1 unidade = 1 metro. Não reproduz as instalações técnicas reais do aeroporto.
 import * as THREE from 'three';
-import { fundir, geometriaPessoa } from './baggage-hall-model.js?v=bagagens-3';
+import { fundir, geometriaPessoa } from './baggage-hall-model.js?v=pessoas-1';
 
 const Y = 2.4, YS = 0.95, ZA = -10, ZB = 4, ZR = -23, XL = -45, XR = 41, XS = [-27, -9, 9, 27];
 export const T = {

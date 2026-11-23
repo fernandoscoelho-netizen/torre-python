@@ -1,7 +1,7 @@
 // Bloco 4 · Relatório do dia, Fase 6: operadores em modelos glTF (.glb) no centro de operações.
 // Usa os modelos partilhados por todas as salas (pessoas-glb.js, modelos/pessoas/). Sentados nas
 // consolas, de pé junto à mesa do dia. Se faltarem os modelos, ficam as pessoas do código.
-import { carregarElenco, criarFigura } from './pessoas-glb.js?v=pessoas-1';
+import { carregarElenco, criarFigura } from './pessoas-glb.js?v=triagem-1';
 import * as THREE from 'three';
 
 export async function carregarPessoas(scene, modelo) {

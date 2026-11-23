@@ -5,7 +5,7 @@
 // indicação dos indicadores que conferem com os dados do dia.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { melhorarCamara } from './camara-salas.js?v=camara-1';
+import { melhorarCamara, empilharBotao } from './camara-salas.js?v=camara-2';
 import { C, construirCentro } from './ops-hall-model.js?v=operacoes-claro-2';
 
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];
@@ -124,7 +124,7 @@ viewport.append(sala);
 const botaoAbrir = document.createElement('button');
 botaoAbrir.className = 'op-abrir';
 botaoAbrir.textContent = '📊 Operações';
-viewport.append(botaoAbrir);
+empilharBotao(viewport, botaoAbrir, 6);
 const $ = id => sala.querySelector('#' + id);
 
 // ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ function construir() {
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.minDistance = 0.8; controls.maxDistance = 60;
     modelo = construirCentro(scene, renderer);
     melhorarCamara({ controls, camera, scene, sala, barra: sala.querySelector('.op-controlos'), antesDe: sala.querySelector('#op-fechar') });
-    import('./ops-hall-pessoas.js?v=pessoas-1').then(m => m.carregarPessoas(scene, modelo)).then(r => { pessoasGlb = r; }).catch(e => console.warn('Operações: modelos .glb não carregados', e));   // opcional
+    import('./ops-hall-pessoas.js?v=triagem-1').then(m => m.carregarPessoas(scene, modelo)).then(r => { pessoasGlb = r; }).catch(e => console.warn('Operações: modelos .glb não carregados', e));   // opcional
     new ResizeObserver(ajustar).observe(sala);
     ajustar(); vista('geral'); pintarTudo();
 }

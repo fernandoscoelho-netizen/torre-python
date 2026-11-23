@@ -4,7 +4,9 @@
 // de cada minuto, as malas que o registo diz terem mudado de troço nesse minuto.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { melhorarCamara } from './camara-salas.js?v=camara-1';
+import { melhorarCamara, empilharBotao } from './camara-salas.js?v=camara-2';
+import { carregarElenco, vestir } from './pessoas-glb.js?v=triagem-1';
+import { aplicarAcabamentos } from './acabamentos.js?v=acabamentos-1';
 import { geometriaMala } from './baggage-hall-model.js?v=pessoas-1';
 import { T, NOS, CAMINHOS, construirCentral } from './sorting-hall-model.js?v=relatorio-1';
 import { prepararScada, desenharScada, zonaEm } from './sorting-scada.js?v=relatorio-1';
@@ -196,7 +198,7 @@ viewport.append(sala);
 const botaoAbrir = document.createElement('button');
 botaoAbrir.className = 'sh-abrir';
 botaoAbrir.textContent = '🔀 Central de triagem';
-viewport.append(botaoAbrir);
+empilharBotao(viewport, botaoAbrir, 2);
 const $ = id => sala.querySelector('#' + id);
 const NOMES_ESTADO = { no_checkin: 'no check-in', em_tapete: 'em tapete', triada: 'na saída certa', errada: 'na saída errada', inspecao: 'em inspeção' };
 function hhmm(m) { m = Math.floor(m); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
@@ -224,6 +226,8 @@ function construir() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.minDistance = 1.5; controls.maxDistance = 210;
     modelo = construirCentral(scene, renderer);
+    aplicarAcabamentos(scene, { excluir: [modelo.matPessoas, modelo.matMalas, modelo.matRota, modelo.matAvaria] });
+    carregarElenco().then(e => vestir(e, scene, modelo.matPessoas, { tirarSalto: false }));   // pessoal com modelos animados (Quaternius, CC0)
     melhorarCamara({ controls, camera, scene, sala, barra: sala.querySelector('.sh-controlos'), antesDe: sala.querySelector('#sh-fechar') });
     SAIDAS.forEach((s, i) => {                   // um trator e três reboques no cais de cada saída
         const x = T.XS[i], c = new THREE.CatmullRomCurve3([[x - 9, 0], [x - 3, 0], [x + 3, 0], [x + 6.6, 0], [x + 8.8, 0.25], [x + 11.8, 4.9], [x + 15, 6], [62, 6], [84, 6]].map(([px, dz]) => new THREE.Vector3(px, 0, T.Z_CAIS + dz)), false, 'centripetal');

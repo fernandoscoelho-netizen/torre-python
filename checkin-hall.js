@@ -4,8 +4,8 @@
 // dentro de cada minuto, os passos de quem anda: entrar no átrio, avançar na fila, ir ao balcão.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { melhorarCamara } from './camara-salas.js?v=camara-1';
-import { carregarElenco, vestir } from './pessoas-glb.js?v=pessoas-1';
+import { melhorarCamara, empilharBotao } from './camara-salas.js?v=camara-2';
+import { carregarElenco, vestir } from './pessoas-glb.js?v=triagem-1';
 import { aplicarAcabamentos } from './acabamentos.js?v=acabamentos-1';
 import { geometriaMala, geometriaPessoa } from './baggage-hall-model.js?v=pessoas-1';
 import { criarCaminho } from './sorting-hall-model.js?v=relatorio-1';
@@ -171,7 +171,7 @@ viewport.append(sala);
 const botaoAbrir = document.createElement('button');
 botaoAbrir.className = 'ck-abrir';
 botaoAbrir.textContent = '🧳 Check-in';
-viewport.append(botaoAbrir);
+empilharBotao(viewport, botaoAbrir, 3);
 const $ = id => sala.querySelector('#' + id);
 function hhmm(m) { m = Math.floor(m); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
 const limpo = s => String(s).replace(/[<&]/g, c => c === '<' ? '&lt;' : '&amp;');

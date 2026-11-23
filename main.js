@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { buildTerminal } from './terminal.js';
+import { criarAviao } from './aviao.js?v=aviao-1';
 import { geoToLocal,localToGeo,northOffsetRadians } from './geo.js';
 import { sampleLanding,totalDuration,phases } from './landing-simulation.js';
 import { createDayRenderer } from './daily-trajectories.js?v=camara-2';
@@ -25,7 +26,11 @@ const concrete=new THREE.MeshStandardMaterial({color:'#b3b2a3',map:texture('#cac
 const white=new THREE.MeshStandardMaterial({color:'#eee9d6',roughness:.8});const yellow=new THREE.MeshBasicMaterial({color:'#e8ba4c'});const steel=new THREE.MeshStandardMaterial({color:'#bbc0bd',metalness:.6,roughness:.45});const glass=new THREE.MeshStandardMaterial({color:'#395d64',metalness:.7,roughness:.23});const dark=new THREE.MeshStandardMaterial({color:'#263c3e',roughness:.65});
 function box(w,h,d,x,y,z,mat,parent=scene){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=h>3;m.receiveShadow=true;parent.add(m);return m;}
 function ground(w,d,x,z,mat=asphalt,y=.04){return box(w,.12,d,x,y,z,mat);}
-function path(points,width,material=asphalt,height=.14){for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i];const len=Math.hypot(b[0]-a[0],b[1]-a[1]);const m=ground(width,len,(a[0]+b[0])/2,(a[1]+b[1])/2,material,height);m.rotation.y=Math.atan2(b[0]-a[0],b[1]-a[1]);}}
+// Caminhos (pistas de circulação, linhas pintadas): um troço por segmento e, em cada mudança de direção,
+// um disco com a mesma largura, para a curva ficar fechada (sem dentes nem falhas no asfalto e na linha).
+const discos=new Map();
+function path(points,width,material=asphalt,height=.14){for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i];const len=Math.hypot(b[0]-a[0],b[1]-a[1]);const m=ground(width,len,(a[0]+b[0])/2,(a[1]+b[1])/2,material,height);m.rotation.y=Math.atan2(b[0]-a[0],b[1]-a[1]);}
+for(let i=1;i<points.length-1;i++){const k=width+'',g=discos.get(k)??discos.set(k,new THREE.CylinderGeometry(width/2,width/2,.12,width>4?40:12)).get(k);const d=new THREE.Mesh(g,material);d.position.set(points[i][0],height,points[i][1]);d.receiveShadow=true;scene.add(d);}}
 function line(points,material=yellow,width=.8,y=.24){path(points,width,material,y);}
 const selectables=[],labels=[];
 function tag(text,pos,maxDistance=Infinity){const el=document.createElement('div');el.className='label';el.textContent=text;document.getElementById('label-layer').appendChild(el);labels.push({el,pos:new THREE.Vector3(...pos),maxDistance});}
@@ -89,14 +94,9 @@ const runwayPoints=[];for(let z=-1740;z<=1740;z+=60)for(const x of [-25,25])runw
 const taxiPoints=[];for(let z=-1100;z<1540;z+=45)for(const x of [193,227])taxiPoints.push([x,.7,z]);lights('#538bff',taxiPoints,.75);
 for(let z=670;z<1560;z+=150){box(.65,24,.65,470,12,z,steel);box(9,.6,1.4,470,24,z,white);}
 // Aviões genéricos, sem marcas comerciais. Comprimento aproximado: 38 m.
-const planes=[];const bodyMat=new THREE.MeshStandardMaterial({color:'#f1f1e8',metalness:.28,roughness:.35});
-function fin(points,mat,parent){const shape=new THREE.Shape();points.forEach(([x,y],i)=>i?shape.lineTo(x,y):shape.moveTo(x,y));shape.closePath();const m=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:.4,bevelEnabled:false}),mat);parent.add(m);return m;}
-function aircraft(id,x,z,color,heading=0){const group=new THREE.Group();group.userData.flightCode=id;scene.add(group);group.position.set(x,0,z);group.rotation.y=heading;const mat=new THREE.MeshStandardMaterial({color,metalness:.35,roughness:.45});
-const body=new THREE.Mesh(new THREE.SphereGeometry(1,20,14),bodyMat);body.scale.set(2,2.1,19);body.position.y=4;body.castShadow=true;group.add(body);
-const cockpit=new THREE.Mesh(new THREE.SphereGeometry(1,12,8),glass);cockpit.scale.set(1.5,1.1,2);cockpit.position.set(0,4.7,-15.3);group.add(cockpit);
-for(const sign of [-1,1]){const wing=fin([[0,-3],[sign*17,6],[sign*17,8],[sign*3,4],[0,5]],bodyMat,group);wing.rotation.x=Math.PI/2;wing.position.set(0,3.5,0);const tailWing=fin([[0,0],[sign*6,4],[sign*6,5],[0,3]],bodyMat,group);tailWing.rotation.x=Math.PI/2;tailWing.position.set(0,5,12);const engine=new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.15,4,14),bodyMat);engine.rotation.x=Math.PI/2;engine.position.set(sign*6,2.5,0);engine.castShadow=true;group.add(engine);const intake=new THREE.Mesh(new THREE.CircleGeometry(.95,14),dark);intake.position.set(sign*6,2.5,-2.05);intake.rotation.y=Math.PI;group.add(intake);for(let k=0;k<15;k++)box(.08,.38,.55,sign*1.95,4.8,-11+k*1.65,glass,group);for(const zz of [-10,5]){const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.55,.55,.8,8),dark);wheel.rotation.z=Math.PI/2;wheel.position.set(sign*.9,.65,zz);group.add(wheel);}}
-const tail=fin([[11,4],[17,4],[17,12],[14,12]],mat,group);tail.rotation.y=-Math.PI/2;tail.position.x=.2;
-box(3.5,.18,15,0,6,5,mat,group);group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.userData={name:id+' · Avião',info:'Voo fictício de demonstração. Selecionável e preparado para receber ações de circulação, chegada e partida.'};selectables.push(o);}});planes.push(group);return group;}
+const planes=[];
+function aircraft(id,x,z,color,heading=0){const group=criarAviao(color);group.userData.flightCode=id;scene.add(group);group.position.set(x,0,z);group.rotation.y=heading;
+group.traverse(o=>{if(o.isMesh){o.userData={name:id+' · Avião',info:'Voo fictício de demonstração. Selecionável e preparado para receber ações de circulação, chegada e partida.'};selectables.push(o);}});planes.push(group);return group;}
 for(const i of [0,2,4,6,8]){const s=stands[i];s.occupiedBy=['PY101','PY202','PY303','PY404','PY505'][i/2];aircraft(s.occupiedBy,s.x-12,s.z,['#4c7574','#b94e46','#51708e'][i%3],-Math.PI/2);}
 for(const stand of stands.filter(s=>s.aircraft&&s.occupiedBy)){const a=stand.aircraft;aircraft(stand.occupiedBy,a.x,a.z,stand.type==='walk'?'#617987':'#71678a',a.heading);}
 aircraft('PY606',-385,1260,'#718a65',Math.PI/2);
@@ -141,4 +141,4 @@ reset();document.getElementById('loading').remove();requestAnimationFrame(animat
 // API de visualização: recebe ações da futura camada de execução Python.
 function playCommands(actions){if(!Array.isArray(actions)||actions.length<1||actions.length>2)throw new Error('Sequência de ações inválida.');if(actions[0].type!=='land'||actions[0].flight!=='PY001')throw new Error('A primeira ação deve autorizar a aterragem de PY001.');const hasPark=actions.length===2;if(hasPark&&(actions[1].type!=='park'||actions[1].flight!=='PY001'||actions[1].stand!=='P04'))throw new Error('Nesta missão, o destino é P04.');reset();commandMode=true;playbackStopTime=hasPark?totalDuration:62;toggleSimulation();}
 function setFlightIndicators(items){for(let i=labels.length-1;i>=0;i--)if(labels[i].dayOnly){labels[i].el.remove();labels.splice(i,1);}for(const item of items){const plane=planes.find(p=>p.userData.flightCode===item.aircraft);if(!plane)continue;tag(item.label,[plane.position.x,14,plane.position.z],700);labels[labels.length-1].dayOnly=true;}}
-window.airportViewer={updateDay3D:(snapshot,rate,timestamp)=>daily3D.sync(snapshot,rate,timestamp),followDayFlight:id=>daily3D.follow(id),releaseDayCamera:()=>daily3D.release(),setFlightIndicators,scene,camera,planes,stands,view,reset,playCommands,pause:()=>{if(running){paused=true;renderSimulation();}},togglePause:()=>{if(running){paused=!paused;renderSimulation();}},setSpeed:value=>{if([1,3,6,12].includes(value)){speedMultiplier=value;document.getElementById('sim-speed').value=value;}},geoToLocal,localToGeo,getState:()=>({demoRunning:running,paused,elapsed,totalDuration,commandCompleted:commandMode&&elapsed>=playbackStopTime,missionComplete:commandMode&&elapsed>=totalDuration,follow,speedMultiplier,...sampleLanding(elapsed),stands:stands.map(s=>({...s}))})};
+window.airportViewer={updateDay3D:(snapshot,rate,timestamp)=>daily3D.sync(snapshot,rate,timestamp),followDayFlight:id=>daily3D.follow(id),releaseDayCamera:()=>daily3D.release(),setFlightIndicators,scene,camera,controls,planes,stands,view,reset,playCommands,pause:()=>{if(running){paused=true;renderSimulation();}},togglePause:()=>{if(running){paused=!paused;renderSimulation();}},setSpeed:value=>{if([1,3,6,12].includes(value)){speedMultiplier=value;document.getElementById('sim-speed').value=value;}},geoToLocal,localToGeo,getState:()=>({demoRunning:running,paused,elapsed,totalDuration,commandCompleted:commandMode&&elapsed>=playbackStopTime,missionComplete:commandMode&&elapsed>=totalDuration,follow,speedMultiplier,...sampleLanding(elapsed),stands:stands.map(s=>({...s}))})};

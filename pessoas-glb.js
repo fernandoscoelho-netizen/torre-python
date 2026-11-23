@@ -152,7 +152,7 @@ export function criarFigura(elenco, semente, { papel = 'passageiro', mulher = nu
 // uma figura .glb e deixa de desenhar a sua própria geometria. A sala continua a mover a malha.
 // Chamar depois de criar as pessoas (pode chamar-se várias vezes: só trata as malhas novas).
 const invisivel = new THREE.MeshBasicMaterial({ visible: false });
-export function vestir(elenco, raiz, matPessoas, { papel = null } = {}) {
+export function vestir(elenco, raiz, matPessoas, { papel = null, tirarSalto = true } = {}) {
     if (!elenco) return 0;
     let n = 0;
     raiz.traverse(m => {
@@ -172,7 +172,7 @@ export function vestir(elenco, raiz, matPessoas, { papel = null } = {}) {
         malhaGlb.onBeforeRender = () => {
             const agora = performance.now(), dt = (agora - antes) / 1000; antes = agora;
             if (dt <= 0) return;
-            if (m.parent?.isScene && !ehSentada(m.geometry)) fig.figura.position.y = -m.position.y;   // tira o "saltitar" das pessoas do código
+            if (tirarSalto && m.parent?.isScene && !ehSentada(m.geometry)) fig.figura.position.y = -m.position.y;   // tira o "saltitar" das pessoas do código
             fig.atualizar(Math.min(dt, 0.25), { sentado: ehSentada(m.geometry), altura: m.geometry.userData?.assento ?? 0.5 });
         };
         n++;

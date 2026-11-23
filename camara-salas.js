@@ -13,8 +13,19 @@ estilo.textContent = `
 .cam-modo[aria-pressed="true"]{background:#3d9be9 !important;border-color:#bfe0ff !important}
 .cam-dica{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#14273ae8;color:#e8eef2;border-radius:6px;padding:7px 12px;font:12px system-ui,sans-serif;pointer-events:none;opacity:0;transition:opacity .4s;z-index:4;text-align:center;max-width:80%}
 .cam-dica.visivel{opacity:1}
+.salas-abrir{position:absolute;right:12px;bottom:32px;z-index:5;display:flex;flex-direction:column-reverse;align-items:flex-end;gap:8px;pointer-events:none}
+.salas-abrir>button{position:static !important;pointer-events:auto}
+.salas-abrir>button[hidden]{display:none}
 `;
 document.head.append(estilo);
+
+// Botões que abrem as salas, empilhados no canto do mapa por uma ordem fixa (de baixo para cima).
+// Ficam numa coluna flexível: se uma sala não carregar ou o botão estiver escondido, não fica buraco.
+export function empilharBotao(viewport, botao, ordem) {
+    let pilha = viewport.querySelector(':scope > .salas-abrir');
+    if (!pilha) { pilha = document.createElement('div'); pilha.className = 'salas-abrir'; viewport.append(pilha); }
+    botao.style.order = ordem; pilha.append(botao);
+}
 
 let modoGlobal = 'rodar';                                                         // o modo escolhido vale para todas as salas
 const todas = new Set();

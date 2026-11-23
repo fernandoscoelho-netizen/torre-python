@@ -4,8 +4,8 @@
 // dentro de cada minuto, o movimento dos reboques, dos tapetes e de cada mala até ao seu lugar no porão.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { melhorarCamara } from './camara-salas.js?v=camara-1';
-import { carregarElenco, vestir } from './pessoas-glb.js?v=pessoas-1';
+import { melhorarCamara, empilharBotao } from './camara-salas.js?v=camara-2';
+import { carregarElenco, vestir } from './pessoas-glb.js?v=triagem-1';
 import { aplicarAcabamentos } from './acabamentos.js?v=acabamentos-1';
 import { geometriaMala } from './baggage-hall-model.js?v=pessoas-1';
 import { A, P, lugarNoPorao, lugarNoReboque, construirPlaca } from './ramp-hall-model.js?v=pessoas-1';
@@ -199,7 +199,7 @@ viewport.append(sala);
 const botaoAbrir = document.createElement('button');
 botaoAbrir.className = 'rp-abrir';
 botaoAbrir.textContent = '✈ Placa';
-viewport.append(botaoAbrir);
+empilharBotao(viewport, botaoAbrir, 4);
 const $ = id => sala.querySelector('#' + id);
 function hhmm(m) { m = Math.floor(m); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
 const limpo = s => String(s).replace(/[<&]/g, c => c === '<' ? '&lt;' : '&amp;');

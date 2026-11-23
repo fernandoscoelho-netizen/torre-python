@@ -4,8 +4,8 @@
 // de cada mala dentro do minuto em que o registo diz que ela mudou de estado.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { melhorarCamara } from './camara-salas.js?v=camara-1';
-import { carregarElenco, vestir } from './pessoas-glb.js?v=pessoas-1';
+import { melhorarCamara, empilharBotao } from './camara-salas.js?v=camara-2';
+import { carregarElenco, vestir } from './pessoas-glb.js?v=triagem-1';
 import { aplicarAcabamentos } from './acabamentos.js?v=acabamentos-1';
 import { G, pontoCircuito, pontoAlimentacao, COMPRIMENTO_ALIMENTACAO, geometriaMala, geometriaPessoa, construirSala } from './baggage-hall-model.js?v=pessoas-1';
 
@@ -153,7 +153,7 @@ viewport.append(sala);
 const botaoAbrir = document.createElement('button');
 botaoAbrir.className = 'bh-abrir';
 botaoAbrir.textContent = '🧳 Sala de bagagens';
-viewport.append(botaoAbrir);
+empilharBotao(viewport, botaoAbrir, 1);
 const $ = id => sala.querySelector('#' + id);
 const NOMES_ESTADO = { no_porao: 'no porão', descarregada: 'descarregada', em_transporte: 'em transporte', em_espera: 'em espera', no_carrossel: 'no carrossel', entregue: 'entregue', inspecao: 'em inspeção' };
 function hhmm(m) { m = Math.floor(m); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }

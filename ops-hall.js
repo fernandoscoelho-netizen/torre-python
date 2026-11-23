@@ -5,7 +5,7 @@
 // indicação dos indicadores que conferem com os dados do dia.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { C, construirCentro } from './ops-hall-model.js?v=relatorio-1';
+import { C, construirCentro } from './ops-hall-model.js?v=operacoes-claro-2';
 
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];
 const ZONAS = [['checkin', 'Check-in'], ['triagem', 'Triagem'], ['embarque', 'Embarque'], ['placa', 'Placa'], ['relatorio', 'Relatório']];
@@ -128,7 +128,7 @@ const $ = id => sala.querySelector('#' + id);
 
 // ---------------------------------------------------------------------------
 // Cena
-let renderer = null, scene, camera, controls, modelo;
+let renderer = null, scene, camera, controls, modelo, pessoasGlb = null;
 let dados = null, t = 0, aReproduzir = false, ultimo = 0, ciclo = null;
 
 function construir() {
@@ -143,6 +143,7 @@ function construir() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.minDistance = 0.8; controls.maxDistance = 60;
     modelo = construirCentro(scene, renderer);
+    import('./ops-hall-pessoas.js?v=operacoes-glb-3').then(m => m.carregarPessoas(scene, modelo)).then(r => { pessoasGlb = r; }).catch(e => console.warn('Operações: modelos .glb não carregados', e));   // opcional
     new ResizeObserver(ajustar).observe(sala);
     ajustar(); vista('geral'); pintarTudo();
 }
@@ -360,6 +361,7 @@ function animar(agora) {
     modelo.teto.visible = camera.position.y < C.ALTURA - 0.2;
     modelo.tras.visible = camera.position.z < C.Z1 - 0.2;
     controls.update();
+    pessoasGlb?.atualizar(dt);
     pintarTudo(); cartoes();
     renderer.render(scene, camera);
 }

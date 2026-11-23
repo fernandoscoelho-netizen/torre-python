@@ -17,6 +17,7 @@ const SENTADO = /sit|sentad/i, PARADO = /idle|parad|stand/i;
 // --- Ossos: reconhece os nomes mais comuns (Mixamo, Quaternius, Rigify, Ready Player Me) --------------
 function lado(nome) {
     const n = nome.replace(/^mixamorig[:_]?/i, '');
+    if (/[a-z0-9]L$/.test(n)) return 'E'; if (/[a-z0-9]R$/.test(n)) return 'D';               // Quaternius: UpperArmL, LowerLegR
     if (/(^|[^a-z])(left|l)([^a-z]|$)|left|[._]l$|_l_|\.l\b|^l[_.]/i.test(n)) return 'E';
     if (/(^|[^a-z])(right|r)([^a-z]|$)|right|[._]r$|_r_|\.r\b|^r[_.]/i.test(n)) return 'D';
     return '';
@@ -91,6 +92,25 @@ function deBracosEmBaixo(raiz, o) {                                             
     }
 }
 
+// Variedade: tons de pele, cabelo e roupa de escritório escolhidos por pessoa, pelo nome do material.
+// Os materiais iguais são partilhados (cache), para não multiplicar os programas de sombreamento.
+const PALETA = {
+    skin: ['#f1c7a5', '#e8b58f', '#d39a72', '#b07a52', '#8a5a3c', '#f6d5bd'],
+    hair: ['#2b1d14', '#4a3222', '#1c1a18', '#7a4e26', '#b38b55', '#8d8d8d'],
+    shirt: ['#f4f6f8', '#d6e6f5', '#ffffff', '#1f4e79', '#9fb3c2', '#e9e4da', '#16365f'],
+    pants: ['#1f2a38', '#2b3440', '#3a3f46', '#4a4f57', '#1a2230'],
+};
+const cacheMat = new Map();
+function variar(mat, semente) {
+    const n = mat.name.toLowerCase().replace(/\d+$/, ''), pal = PALETA[n === 'hair' ? 'hair' : n] ?? (/shirt|top|dress|jacket|suit/.test(n) ? PALETA.shirt : /pant|skirt/.test(n) ? PALETA.pants : null);
+    if (!pal) { mat.envMapIntensity = 0.8; return mat; }
+    const sal = { skin: 3, hair: 5, shirt: 7, pants: 11 }[n] ?? (mat.name.length * 13);
+    const cor = pal[Math.floor(((semente * 2654435761 + sal * 40503) >>> 0) / 4294967296 * pal.length)] ;
+    const chave = mat.name + cor;
+    if (!cacheMat.has(chave)) { const m = mat.clone(); m.color.set(cor); if (/2$/.test(mat.name)) m.color.multiplyScalar(0.85); m.envMapIntensity = 0.8; cacheMat.set(chave, m); }
+    return cacheMat.get(chave);
+}
+
 // ---------------------------------------------------------------------------
 export async function carregarPessoas(scene, modelo) {
     let lista;
@@ -112,7 +132,7 @@ export async function carregarPessoas(scene, modelo) {
         const fontes = lugar.sentado ? (okS.length ? okS : okP) : (okP.length ? okP : okS);
         const gltf = fontes[lugar.semente % fontes.length];
         const raiz = SkeletonUtils.clone(gltf.scene);
-        raiz.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; if (m.material) m.material.envMapIntensity = 0.8; } });
+        raiz.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; m.material = [].concat(m.material).map(x => variar(x, lugar.semente)); if (m.material.length === 1) m.material = m.material[0]; } });
         // Escala: a altura do modelo em pé passa a ser ALTURA metros (com uma pequena variação)
         raiz.updateMatrixWorld(true);
         const caixa = new THREE.Box3().setFromObject(raiz), alt = Math.max(0.01, caixa.max.y - caixa.min.y);

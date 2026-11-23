@@ -143,7 +143,7 @@ function construir() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.minDistance = 0.8; controls.maxDistance = 60;
     modelo = construirCentro(scene, renderer);
-    import('./ops-hall-pessoas.js?v=operacoes-glb-1').then(m => m.carregarPessoas(scene, modelo)).then(r => { pessoasGlb = r; }).catch(e => console.warn('Operações: modelos .glb não carregados', e));   // opcional
+    import('./ops-hall-pessoas.js?v=operacoes-glb-3').then(m => m.carregarPessoas(scene, modelo)).then(r => { pessoasGlb = r; }).catch(e => console.warn('Operações: modelos .glb não carregados', e));   // opcional
     new ResizeObserver(ajustar).observe(sala);
     ajustar(); vista('geral'); pintarTudo();
 }

@@ -1,6 +1,6 @@
 // Painel «Missões»: um só sítio para escolher exemplos, exercícios livres e níveis.
 // Também mantém o estado no topo (missão atual e progresso) e o enunciado recolhível.
-import {LEVELS} from './curriculum.js?v=relatorio-1';
+import {LEVELS} from './curriculum.js?v=enunciados-1';
 import {FREE_EXERCISES} from './free-exercises.js';
 
 const $ = id => document.getElementById(id);

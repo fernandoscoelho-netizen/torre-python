@@ -4,9 +4,11 @@
 // dentro de cada minuto, os passos de quem anda: entrar no átrio, avançar na fila, ir ao balcão.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { geometriaMala, geometriaPessoa } from './baggage-hall-model.js?v=bagagens-3';
+import { melhorarCamara } from './camara-salas.js?v=camara-1';
+import { carregarElenco, vestir } from './pessoas-glb.js?v=pessoas-1';
+import { geometriaMala, geometriaPessoa } from './baggage-hall-model.js?v=pessoas-1';
 import { criarCaminho } from './sorting-hall-model.js?v=relatorio-1';
-import { K, CAMINHOS_MALA, D_BALANCA, FILA, COMP_BAIAS, construirCheckin } from './checkin-hall-model.js?v=relatorio-1';
+import { K, CAMINHOS_MALA, D_BALANCA, FILA, COMP_BAIAS, construirCheckin } from './checkin-hall-model.js?v=pessoas-1';
 
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];
 const COR_SEM_VOO = '#8a8f96', COR_ILEGIVEL = '#f4f4ee';
@@ -175,6 +177,7 @@ const limpo = s => String(s).replace(/[<&]/g, c => c === '<' ? '&lt;' : '&amp;')
 
 // ---------------------------------------------------------------------------
 // Cena
+let elenco = null;
 let renderer = null, scene, camera, controls, modelo, marcador, bolas = null, aneis = null;
 let dados = null, t = 0, fimVisual = 0, aReproduzir = false, ultimo = 0, ciclo = null, seguido = null, aproximar = false;
 let malhasPessoa = [], malhasMala = [], objetos = [], poses = [], lugar = [];
@@ -193,6 +196,8 @@ function construir() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.minDistance = 1.5; controls.maxDistance = 150;
     modelo = construirCheckin(scene, renderer);
+    melhorarCamara({ controls, camera, scene, sala, barra: sala.querySelector('.ck-controlos'), antesDe: sala.querySelector('#ck-fechar') });
+    carregarElenco().then(e => { elenco = e; vestir(e, scene, modelo.matPessoas); });     // pessoas .glb, se existirem (opcional)
     marcador = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 8, 36), new THREE.MeshBasicMaterial({ color: '#ffd400', depthTest: false, transparent: true }));
     marcador.rotation.x = Math.PI / 2; marcador.renderOrder = 5; marcador.visible = false; scene.add(marcador);
     const raio = new THREE.Raycaster(), ponteiro = new THREE.Vector2();
@@ -250,6 +255,7 @@ function carregar(registo) {
         const malha = new THREE.Mesh(geoPessoas[p.i % 28], modelo.matPessoas);
         malha.castShadow = true; malha.visible = false; malha.userData.reserva = p.reserva; scene.add(malha); objetos.push(malha); malhasPessoa.push(malha);
     }
+    vestir(elenco, scene, modelo.matPessoas);
     for (const mala of dados.malas) {
         const cor = mala.t === null ? COR_SEM_VOO : !mala.legivel ? COR_ILEGIVEL : mala.dono.cor, g = geosMala(Math.floor(acaso(mala.indice, 14) * 24), cor);
         const malha = new THREE.Mesh(g.sem, modelo.matMalas);

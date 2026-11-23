@@ -4,8 +4,10 @@
 // dentro de cada minuto, os passos de quem anda: avançar na fila, passar no pórtico, ir até à porta.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
+import { melhorarCamara } from './camara-salas.js?v=camara-1';
+import { carregarElenco, vestir } from './pessoas-glb.js?v=pessoas-1';
 import { criarCaminho } from './sorting-hall-model.js?v=relatorio-1';
-import { K, FILAS, FILAS_PORTA, CADEIRAS, lugarEmTerra, lugarNaLoja, geometriaPassageiro, geometriaTabuleiro, construirEmbarque } from './boarding-hall-model.js?v=relatorio-1';
+import { K, FILAS, FILAS_PORTA, CADEIRAS, lugarEmTerra, lugarNaLoja, geometriaPassageiro, geometriaTabuleiro, construirEmbarque } from './boarding-hall-model.js?v=pessoas-1';
 
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];
 const T_AVANCO = 0.25;                           // minutos que a fila demora a avançar um lugar
@@ -261,6 +263,7 @@ const limpo = s => String(s).replace(/[<&]/g, c => c === '<' ? '&lt;' : '&amp;')
 
 // ---------------------------------------------------------------------------
 // Cena
+let elenco = null;
 let renderer = null, scene, camera, controls, modelo, marcador, bolas = null, aneis = null;
 let dados = null, t = 0, fimVisual = 0, aReproduzir = false, ultimo = 0, ciclo = null, seguido = null, aproximar = false, portaVista = 'G21';
 let malhasPessoa = [], objetos = [], poses = [], tabuleiros = {};
@@ -279,6 +282,8 @@ function construir() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.minDistance = 1.5; controls.maxDistance = 330;
     modelo = construirEmbarque(scene, renderer);
+    melhorarCamara({ controls, camera, scene, sala, barra: sala.querySelector('.bd-controlos'), antesDe: sala.querySelector('#bd-fechar') });
+    carregarElenco().then(e => { elenco = e; vestir(e, scene, modelo.matPessoas); });     // pessoas .glb, se existirem (opcional)
     for (const codigo of Object.keys(K.LINHAS)) { const m = new THREE.Mesh(geometriaTabuleiro(Object.keys(tabuleiros).length + 1), modelo.matTabuleiro); m.castShadow = true; m.visible = false; scene.add(m); tabuleiros[codigo] = m; }
     marcador = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 8, 36), new THREE.MeshBasicMaterial({ color: '#ffd400', depthTest: false, transparent: true }));
     marcador.rotation.x = Math.PI / 2; marcador.renderOrder = 5; marcador.visible = false; scene.add(marcador);
@@ -329,6 +334,7 @@ function carregar(registo) {
         const malha = new THREE.Mesh(geoPessoas[k].pe, modelo.matPessoas);
         malha.castShadow = true; malha.visible = false; malha.userData.reserva = p.reserva; malha.userData.geos = geoPessoas[k]; scene.add(malha); objetos.push(malha); malhasPessoa.push(malha);
     }
+    vestir(elenco, scene, modelo.matPessoas);
     const n = dados.passageiros.length;
     bolas = new THREE.InstancedMesh(new THREE.SphereGeometry(0.085, 10, 8), new THREE.MeshBasicMaterial({ toneMapped: false }), n); bolas.frustumCulled = false; scene.add(bolas);
     aneis = new THREE.InstancedMesh(new THREE.TorusGeometry(0.36, 0.035, 6, 24).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ff3b30', toneMapped: false }), n); aneis.frustumCulled = false; scene.add(aneis);

@@ -4,7 +4,7 @@
 // painel de partidas, apoio ao cliente e acesso ao controlo de segurança. Medidas em metros,
 // à escala de um átrio real, mas sem reproduzir nenhum aeroporto em concreto.
 import * as THREE from 'three';
-import { fundir, geometriaPessoa } from './baggage-hall-model.js?v=bagagens-3';
+import { fundir, geometriaPessoa } from './baggage-hall-model.js?v=pessoas-1';
 import { criarCaminho } from './sorting-hall-model.js?v=relatorio-1';
 
 export const K = {
@@ -78,7 +78,7 @@ export function geometriaAgente(semente) {
     p.push(peca(cx(0.07, 0.22, 0.02), realce, 0, 1.3, 0.125 * lg), peca(cx(0.16, 0.05, 0.03), '#f2f2ee', 0, 1.44, 0.1 * lg));
     p.push(peca(cil(0.05, 0.055, 0.08, 8), pele, 0, 1.5, 0)); p.push(peca(new THREE.SphereGeometry(0.105, 12, 10), pele, 0, 1.63, 0));
     p.push(peca(new THREE.SphereGeometry(0.112, 12, 8, 0, Math.PI * 2, 0, Math.PI * (r() < 0.5 ? 0.62 : 0.48)), cabelo, 0, 1.64, -0.012));
-    const g = fundir(p); g.scale(e, e, e); return g;
+    const g = fundir(p); g.scale(e, e, e); g.userData = { papel: 'agente', semente }; return g;
 }
 
 // ---------------------------------------------------------------------------

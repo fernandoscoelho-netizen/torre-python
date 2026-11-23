@@ -4,7 +4,8 @@
 // de cada minuto, as malas que o registo diz terem mudado de troço nesse minuto.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { geometriaMala } from './baggage-hall-model.js?v=bagagens-3';
+import { melhorarCamara } from './camara-salas.js?v=camara-1';
+import { geometriaMala } from './baggage-hall-model.js?v=pessoas-1';
 import { T, NOS, CAMINHOS, construirCentral } from './sorting-hall-model.js?v=relatorio-1';
 import { prepararScada, desenharScada, zonaEm } from './sorting-scada.js?v=relatorio-1';
 
@@ -223,6 +224,7 @@ function construir() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.minDistance = 1.5; controls.maxDistance = 210;
     modelo = construirCentral(scene, renderer);
+    melhorarCamara({ controls, camera, scene, sala, barra: sala.querySelector('.sh-controlos'), antesDe: sala.querySelector('#sh-fechar') });
     SAIDAS.forEach((s, i) => {                   // um trator e três reboques no cais de cada saída
         const x = T.XS[i], c = new THREE.CatmullRomCurve3([[x - 9, 0], [x - 3, 0], [x + 3, 0], [x + 6.6, 0], [x + 8.8, 0.25], [x + 11.8, 4.9], [x + 15, 6], [62, 6], [84, 6]].map(([px, dz]) => new THREE.Vector3(px, 0, T.Z_CAIS + dz)), false, 'centripetal');
         c.arcLengthDivisions = 500;

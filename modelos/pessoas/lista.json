@@ -1,0 +1,13 @@
+{
+  "altura": 1.72,
+  "modelos": [
+    { "ficheiro": "homem-camisa.glb" },
+    { "ficheiro": "homem-manga-comprida.glb" },
+    { "ficheiro": "homem-casual.glb" },
+    { "ficheiro": "homem-fato.glb", "papeis": ["passageiro", "agente", "operador"] },
+    { "ficheiro": "mulher-casual.glb", "mulher": true },
+    { "ficheiro": "mulher-alternativa.glb", "mulher": true },
+    { "ficheiro": "mulher-vestido.glb", "mulher": true, "papeis": ["passageiro", "agente", "operador"] },
+    { "ficheiro": "mulher-top.glb", "mulher": true, "papeis": ["passageiro"] }
+  ]
+}

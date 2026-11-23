@@ -4,7 +4,10 @@
 // de cada mala dentro do minuto em que o registo diz que ela mudou de estado.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { G, pontoCircuito, pontoAlimentacao, COMPRIMENTO_ALIMENTACAO, geometriaMala, geometriaPessoa, construirSala } from './baggage-hall-model.js?v=bagagens-3';
+import { melhorarCamara } from './camara-salas.js?v=camara-1';
+import { carregarElenco, vestir } from './pessoas-glb.js?v=pessoas-1';
+import { aplicarAcabamentos } from './acabamentos.js?v=acabamentos-1';
+import { G, pontoCircuito, pontoAlimentacao, COMPRIMENTO_ALIMENTACAO, geometriaMala, geometriaPessoa, construirSala } from './baggage-hall-model.js?v=pessoas-1';
 
 const V = 8;                                     // carrossel: metros por minuto simulado com o motor ligado
 const VF = 60;                                   // tapete de alimentação: metros por minuto
@@ -157,6 +160,7 @@ function hhmm(m) { m = Math.floor(m); return String(Math.floor(m / 60)).padStart
 
 // ---------------------------------------------------------------------------
 // Cena
+let elenco = null;
 let renderer = null, scene, camera, controls, modelo, marcador;
 let dados = null, t = 0, fimVisual = 0, aReproduzir = false, ultimo = 0, ciclo = null, seguida = null;
 let malhasMala = new Map(), pessoas = [], lotes = [], operadores = [], objetos = [];
@@ -177,6 +181,9 @@ function construir() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.minDistance = 1.5; controls.maxDistance = 170;
     modelo = construirSala(scene, renderer);
+    melhorarCamara({ controls, camera, scene, sala, barra: sala.querySelector('.bh-controlos'), antesDe: sala.querySelector('#bh-fechar') });
+    aplicarAcabamentos(scene, { excluir: [modelo.matPessoas, modelo.matMalas] });          // textura e relevo fino no mobiliário
+    carregarElenco().then(e => { elenco = e; vestir(e, scene, modelo.matPessoas); });     // pessoas .glb, se existirem (opcional)
     for (let i = 0; i < 4; i++) {                // um operador de pista em cada cais de carga
         const m = new THREE.Mesh(geometriaPessoa(900 + i, true), modelo.matPessoas);
         m.position.set(G.XS[i] + 1.05, 0, -28.9); m.rotation.y = -Math.PI / 2; m.castShadow = true; m.visible = false; scene.add(m); operadores.push(m);
@@ -208,7 +215,7 @@ export function vista(nome) {
     if (!camera) return;
     let x0 = 0;
     if (dados) { const voo = Object.keys(dados.voos)[0], tap = tapeteDoVoo(dados, voo, Math.min(t, dados.fim)) ?? Object.keys(dados.tapetes).find(c => dados.tapetes[c].entradas.length); x0 = modelo.carrosseis[tap]?.x ?? 0; }
-    const v = Array.isArray(nome) ? nome : { geral: [[0, 60, 47], [0, 0, -5]], passageiro: [[x0 - 13.5, 1.72, 18.6], [x0 + 2, 1.25, 7.5]], carrossel: [[x0 + 11.5, 7.4, 21], [x0 - 0.5, 0.8, 3]], tecnica: [[x0 + 13, 8.5, -45], [x0 + 1, 1, -22]] }[nome] ?? null;
+    const v = Array.isArray(nome) ? nome : { geral: [[-32, 30, 46], [2, 0, -3]], passageiro: [[x0 - 13.5, 1.72, 18.6], [x0 + 2, 1.25, 7.5]], carrossel: [[x0 + 11.5, 7.4, 21], [x0 - 0.5, 0.8, 3]], tecnica: [[x0 + 13, 8.5, -45], [x0 + 1, 1, -22]] }[nome] ?? null;
     if (!v) return;
     camera.position.set(...v[0]); controls.target.set(...v[1]); controls.update();
     if (!Array.isArray(nome)) $('bh-vista').value = nome;
@@ -451,6 +458,7 @@ function planear() {
         const malha = new THREE.Mesh(geoPessoas[i % 28], modelo.matPessoas); malha.castShadow = true; malha.visible = false; scene.add(malha); objetos.push(malha);
         return mala.dono = { chegada, trocos, fimVida, malha, pose: null };
     });
+    vestir(elenco, scene, modelo.matPessoas);
 }
 
 function carregar(registo) {

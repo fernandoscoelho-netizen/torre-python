@@ -4,8 +4,11 @@
 // dentro de cada minuto, o movimento dos reboques, dos tapetes e de cada mala até ao seu lugar no porão.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { geometriaMala } from './baggage-hall-model.js?v=bagagens-3';
-import { A, P, lugarNoPorao, lugarNoReboque, construirPlaca } from './ramp-hall-model.js?v=relatorio-1';
+import { melhorarCamara, empilharBotao } from './camara-salas.js?v=camara-2';
+import { carregarElenco, vestir } from './pessoas-glb.js?v=triagem-1';
+import { aplicarAcabamentos } from './acabamentos.js?v=acabamentos-1';
+import { geometriaMala } from './baggage-hall-model.js?v=pessoas-1';
+import { A, P, lugarNoPorao, lugarNoReboque, construirPlaca } from './ramp-hall-model.js?v=pessoas-1';
 
 const CORES_VOO = ['#e4572e', '#2e86de', '#f2b705', '#3fa34d', '#9b5de5'];
 const T_CARGA = 0.36, T_DESCARGA = 0.5;             // minutos que uma mala demora do reboque ao porão e do porão ao reboque
@@ -196,7 +199,7 @@ viewport.append(sala);
 const botaoAbrir = document.createElement('button');
 botaoAbrir.className = 'rp-abrir';
 botaoAbrir.textContent = '✈ Placa';
-viewport.append(botaoAbrir);
+empilharBotao(viewport, botaoAbrir, 4);
 const $ = id => sala.querySelector('#' + id);
 function hhmm(m) { m = Math.floor(m); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
 const limpo = s => String(s).replace(/[<&]/g, c => c === '<' ? '&lt;' : '&amp;');
@@ -204,6 +207,7 @@ const num = (v, casas = 1) => Number(v).toFixed(casas).replace('.', ',');
 
 // ---------------------------------------------------------------------------
 // Cena
+let elenco = null;
 let renderer = null, scene, camera, controls, modelo, marcador;
 let dados = null, t = 0, fimVisual = 0, aReproduzir = false, ultimo = 0, ciclo = null, escolhido = '', atual = null, vistaAtual = 'geral', raioX = false;
 let malhasMala = [];
@@ -222,6 +226,9 @@ function construir() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.015; controls.minDistance = 2; controls.maxDistance = 420;
     modelo = construirPlaca(scene, renderer);
+    melhorarCamara({ controls, camera, scene, sala, barra: sala.querySelector('.rp-controlos'), antesDe: sala.querySelector('#rp-fechar') });
+    aplicarAcabamentos(scene, { excluir: [modelo.matPessoas, modelo.matMalas] });          // textura e relevo fino no mobiliário
+    carregarElenco().then(e => { elenco = e; vestir(e, scene, modelo.matPessoas); });     // pessoas .glb, se existirem (opcional)
     marcador = new THREE.Mesh(new THREE.ConeGeometry(1.1, 2.4, 4), new THREE.MeshBasicMaterial({ color: '#ffd400', toneMapped: false }));
     marcador.rotation.x = Math.PI; marcador.visible = false; scene.add(marcador);
     const raio = new THREE.Raycaster(), ponteiro = new THREE.Vector2();

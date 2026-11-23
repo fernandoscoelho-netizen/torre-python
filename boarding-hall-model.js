@@ -5,10 +5,10 @@
 // lugares P21 a P24, com as mangas encostadas. Medidas em metros; o piso da sala fica 3,5 m
 // acima da placa. Não reproduz nenhum aeroporto em concreto.
 import * as THREE from 'three';
-import { fundir } from './baggage-hall-model.js?v=bagagens-3';
+import { fundir } from './baggage-hall-model.js?v=pessoas-1';
 import { criarCaminho } from './sorting-hall-model.js?v=relatorio-1';
-import { geometriaAgente } from './checkin-hall-model.js?v=relatorio-1';
-import { P, construirEstacionados } from './ramp-hall-model.js?v=relatorio-1';
+import { geometriaAgente } from './checkin-hall-model.js?v=pessoas-1';
+import { P, construirEstacionados } from './ramp-hall-model.js?v=pessoas-1';
 
 export const K = {
     X0: -124, X1: 94, Z0: -20, Z1: 0, ALTURA: 7.5, Y_PLACA: -3.5,
@@ -82,7 +82,7 @@ export function geometriaPassageiro(semente, sentado = false) {
     p.push(peca(cil(0.05, 0.055, 0.08, 8), pele, 0, 1.5 + dy, dz), peca(new THREE.SphereGeometry(0.105, 12, 10), pele, 0, 1.63 + dy, dz));
     p.push(peca(new THREE.SphereGeometry(0.112, 12, 8, 0, Math.PI * 2, 0, Math.PI * (cabeloComprido ? 0.62 : 0.48)), cabelo, 0, 1.64 + dy, dz - 0.012));
     if (mochila) p.push(sentado ? peca(caixaRedonda(0.3, 0.4, 0.18, 0.05), corMochila, 0.36, 0, 0.3) : peca(caixaRedonda(0.3, 0.42, 0.16, 0.05), corMochila, 0, 0.95, -0.2));
-    const g = fundir(p); g.scale(e, sentado ? 1 : e, e); return g;
+    const g = fundir(p); g.scale(e, sentado ? 1 : e, e); g.userData = { papel: 'passageiro', semente, sentado }; return g;
 }
 
 // ---------------------------------------------------------------------------

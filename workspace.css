@@ -153,7 +153,7 @@ body.workspace-mode{background:#eef0e9;color:#233b33}.workspace-mode>header,.wor
 /* O painel de resultados mostra só resultados; Guia e Funções do jogo abrem-se na janela de leitura (barra Guia / Léxico) */
 #workspace .output-tabs #tab-functions,#workspace .output-tabs #tab-guide{display:none}
 /* Enunciados dos níveis: parágrafos curtos, listas e código, alinhados à esquerda */
-#lesson-description{font-size:13px;line-height:1.55;color:#3f5a7a;text-align:left;hyphens:manual;overflow-wrap:break-word;max-width:72ch}
+#lesson-description{font-size:13px;line-height:1.55;color:#3f5a7a;text-align:left;hyphens:manual;overflow-wrap:break-word;max-width:none}
 #workspace .mission-brief #lesson-description p{margin:0 0 8px;font-size:13px;line-height:1.55;color:#3f5a7a;text-align:left}
 #lesson-description ul{margin:2px 0 10px;padding-left:20px}
 #lesson-description li{margin:3px 0;padding-left:2px;line-height:1.5}
@@ -171,7 +171,7 @@ body.workspace-mode{background:#eef0e9;color:#233b33}.workspace-mode>header,.wor
 .enunciado-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:10px}
 .enunciado-dialog-head h2{margin:0;font-size:24px;color:#1e426b;font-weight:600}
 #enunciado-dialog-close{border:1px solid #b7c6d9;border-radius:7px;background:#fff;color:#203a59;font-size:20px;line-height:1;padding:6px 11px;cursor:pointer}
-#enunciado-dialog-text{font-size:16px;line-height:1.65;color:#2f4b6b;max-width:68ch}
+#enunciado-dialog-text{font-size:16px;line-height:1.65;color:#2f4b6b}
 #enunciado-dialog-text p{margin:0 0 12px}
 #enunciado-dialog-text ul{margin:2px 0 14px;padding-left:24px}
 #enunciado-dialog-text li{margin:5px 0}

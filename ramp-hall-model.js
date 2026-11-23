@@ -4,7 +4,7 @@
 // que saem da central de triagem, fachada do terminal e caminho de circulação. Medidas em metros, à
 // escala de um avião real, mas sem reproduzir nenhum aeroporto nem nenhuma companhia em concreto.
 import * as THREE from 'three';
-import { fundir, geometriaPessoa } from './baggage-hall-model.js?v=pessoas-1';
+import { fundir, geometriaPessoa } from './baggage-hall-model.js?v=bagagens-3';
 import { criarCaminho } from './sorting-hall-model.js?v=relatorio-1';
 
 // Avião: s é a distância ao nariz, x é positivo para estibordo (o lado das portas de carga).
@@ -342,7 +342,7 @@ export function construirPlaca(scene, renderer) {
     const matDentro = M('#ffffff', 0.8, 0, { vertexColors: true, side: THREE.DoubleSide, emissive: '#2a2d30' });
     const matPartes = M('#ffffff', 0.4, 0.25, { vertexColors: true, side: THREE.DoubleSide });
     const forros = [];
-    const gTrator = geometriaTrator(), gReboque = geometriaReboque(), gTapete = geometriasTapete(), gCondutor = geometriaPessoa(71, true); gCondutor.userData = { papel: 'placa', semente: 71, sentado: true, assento: 0.95 };
+    const gTrator = geometriaTrator(), gReboque = geometriaReboque(), gTapete = geometriasTapete(), gCondutor = geometriaPessoa(71, true);
     const lonaTex = tela(64, 256, (g) => { g.fillStyle = '#1c1d1f'; g.fillRect(0, 0, 64, 256); ruido(g, 64, 256, 500, ['#141516', '#2a2c2e'], 1.2); g.fillStyle = '#3a3d40'; for (let y = 0; y < 256; y += 32) g.fillRect(0, y, 64, 3); });
     const lugares = {};
 
